@@ -1,0 +1,8 @@
+module github.com/ThreeDotsLabs/watermill-amazonsqs
+
+go 1.12
+
+require (
+	github.com/ThreeDotsLabs/watermill v1.0.0
+	github.com/aws/aws-sdk-go v1.25.1
+)
