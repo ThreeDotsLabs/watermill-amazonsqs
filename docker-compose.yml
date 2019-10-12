@@ -1,6 +1,6 @@
 version: '3'
 services:
-  elasticmq:
-    image: softwaremill/elasticmq
+  goaws:
+    image: pafortin/goaws:latest
     ports:
-      - 9324:9324
+      - 4100:4100
