@@ -1,26 +1,28 @@
-package amazonsqs
+package sns
 
 import (
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go/service/sns"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 )
+
+type PublisherConfig struct {
+	AWSConfig aws.Config
+}
 
 type Publisher struct {
 	config PublisherConfig
 	logger watermill.LoggerAdapter
-	sqs    *sqs.SQS
-}
-
-type PublisherConfig struct {
-	AWSConfig aws.Config
-	Marshaler Marshaler
+	sns    *sns.SNS
 }
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
-	config.AWSConfig = SetEndPoint(config.AWSConfig)
+	config.AWSConfig = connection.SetEndPoint(config.AWSConfig)
 	sess, err := session.NewSession(&config.AWSConfig)
 	if err != nil {
 		// TODO wrap
@@ -28,7 +30,7 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 	}
 
 	return &Publisher{
-		sqs:    sqs.New(sess),
+		sns:    sns.New(sess),
 		config: config,
 		logger: logger,
 	}, nil
@@ -36,26 +38,18 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 
 func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 	// TODO method for generating
-	queueName := topic
-
-	result, err := p.sqs.GetQueueUrl(&sqs.GetQueueUrlInput{
-		QueueName: aws.String(queueName),
+	topicInfo, err := p.sns.CreateTopic(&sns.CreateTopicInput{
+		Name: aws.String(topic),
 	})
 	if err != nil {
 		return err
 	}
 
 	for _, msg := range messages {
-		sqsMsg, err := p.config.Marshaler.Marshal(msg)
-		if err != nil {
-			return err
-		}
-
 		p.logger.Info("Sending message", watermill.LogFields{"msg": msg})
-		_, err = p.sqs.SendMessage(&sqs.SendMessageInput{
-			QueueUrl:          result.QueueUrl,
-			MessageAttributes: sqsMsg.MessageAttributes,
-			MessageBody:       sqsMsg.Body,
+		_, err = p.sns.Publish(&sns.PublishInput{
+			TopicArn: topicInfo.TopicArn,
+			Message:  aws.String(string(msg.Payload)),
 		})
 		if err != nil {
 			return err

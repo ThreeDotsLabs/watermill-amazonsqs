@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go/aws"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/amazonsqs"
-	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 )
 
 func main() {
@@ -18,17 +18,17 @@ func main() {
 		Region: aws.String("eu-north-1"),
 	}
 
-	pub, err := amazonsqs.NewPublisher(amazonsqs.PublisherConfig{
+	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig: cfg,
-		Marshaler: amazonsqs.DefaultMarshalerUnmarshaler{},
+		Marshaler: sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {
 		panic(err)
 	}
 
-	sub, err := amazonsqs.NewSubsciber(amazonsqs.SubscriberConfig{
+	sub, err := sqs.NewSubsciber(sqs.SubscriberConfig{
 		AWSConfig:   cfg,
-		Unmarshaler: amazonsqs.DefaultMarshalerUnmarshaler{},
+		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {
 		panic(err)
