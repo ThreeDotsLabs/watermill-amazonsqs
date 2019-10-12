@@ -1,11 +1,12 @@
 package amazonsqs
 
 import (
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Publisher struct {
@@ -65,5 +66,5 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 }
 
 func (p Publisher) Close() error {
-	panic("implement me")
+	return nil
 }

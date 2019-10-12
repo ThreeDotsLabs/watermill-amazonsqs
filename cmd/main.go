@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/amazonsqs"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go/aws"
-	"time"
 )
 
 func main() {
@@ -31,8 +33,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	_ = pub
 
 	ctx := context.Background()
 

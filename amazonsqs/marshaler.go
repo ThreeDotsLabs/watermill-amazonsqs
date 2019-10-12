@@ -1,9 +1,10 @@
 package amazonsqs
 
 import (
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
+
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Marshaler interface {

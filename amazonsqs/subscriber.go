@@ -3,13 +3,13 @@ package amazonsqs
 import (
 	"context"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Subscriber struct {
@@ -66,7 +66,7 @@ func (s Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messag
 
 func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *message.Message) error {
 	result, err := s.sqs.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
-		WaitTimeSeconds: aws.Int64(10),
+		WaitTimeSeconds: aws.Int64(1),
 		QueueUrl:        aws.String(queueURL),
 	})
 	if err != nil {
@@ -88,7 +88,7 @@ func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *m
 
 		select {
 		case <-msg.Acked():
-			err := s.deleteMessage(queueURL, sqsMsg.ReceiptHandle)
+			err := s.deleteMessage(ctx, queueURL, sqsMsg.ReceiptHandle)
 			if err != nil {
 				// TODO handle
 				return err
@@ -101,8 +101,8 @@ func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *m
 	return nil
 }
 
-func (s Subscriber) deleteMessage(queueURL string, receiptHandle *string) error {
-	_, err := s.sqs.DeleteMessage(&sqs.DeleteMessageInput{
+func (s Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptHandle *string) error {
+	_, err := s.sqs.DeleteMessageWithContext(ctx, &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(queueURL),
 		ReceiptHandle: receiptHandle,
 	})
@@ -116,7 +116,14 @@ func (s Subscriber) deleteMessage(queueURL string, receiptHandle *string) error 
 }
 
 func (s Subscriber) SubscribeInitialize(topic string) error {
-	_, err := s.queueURL(topic)
+	// TODO move
+	sess, err := session.NewSession(&s.config.AWSConfig)
+	if err != nil {
+		return err
+	}
+	s.sqs = sqs.New(sess)
+
+	_, err = s.queueURL(topic)
 	return err
 }
 
@@ -152,5 +159,5 @@ func (s Subscriber) queueURL(topic string) (string, error) {
 }
 
 func (s Subscriber) Close() error {
-	panic("implement me")
+	return nil
 }
