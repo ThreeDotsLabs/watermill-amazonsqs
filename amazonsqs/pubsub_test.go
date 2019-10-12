@@ -16,7 +16,7 @@ func TestPublishSubscribe(t *testing.T) {
 	tests.TestPubSub(
 		t,
 		tests.Features{
-			ConsumerGroups:      true,
+			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
 			GuaranteedOrder:     false,
 			Persistent:          true,

@@ -1,12 +1,11 @@
 package amazonsqs
 
 import (
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
-
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type Publisher struct {
@@ -21,6 +20,7 @@ type PublisherConfig struct {
 }
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
+	config.AWSConfig = SetEndPoint(config.AWSConfig)
 	sess, err := session.NewSession(&config.AWSConfig)
 	if err != nil {
 		// TODO wrap

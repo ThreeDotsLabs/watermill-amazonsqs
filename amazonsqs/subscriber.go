@@ -2,7 +2,6 @@ package amazonsqs
 
 import (
 	"context"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -24,6 +23,7 @@ type SubscriberConfig struct {
 }
 
 func NewSubsciber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Subscriber, error) {
+	config.AWSConfig = SetEndPoint(config.AWSConfig)
 	return &Subscriber{
 		config: config,
 		logger: logger,
