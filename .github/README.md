@@ -9,7 +9,6 @@ A new SQS Publisher will create the queue if it does not exist.
 
 A new SQS Publisher will create the topic if it does not exist. Be aware that without any subsciptions the messages published to that newly created topic would be lost.  Make sure you always create the topic and subscriptions before you start an SNS publisher.
 
-
 #### Unit Tests
 
 You can run the unit tests by simply running  the command: `go test -cover -race ./...`

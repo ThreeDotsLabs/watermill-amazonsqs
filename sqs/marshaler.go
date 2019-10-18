@@ -1,4 +1,4 @@
-package amazonsqs
+package sqs
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
@@ -11,7 +11,7 @@ type Marshaler interface {
 	Marshal(msg *message.Message) (*sqs.Message, error)
 }
 
-type Unmarshaler interface {
+type UnMarshaler interface {
 	Unmarshal(msg *sqs.Message) (*message.Message, error)
 }
 

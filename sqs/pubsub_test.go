@@ -1,4 +1,4 @@
-package amazonsqs_test
+package sqs
 
 import (
 	"testing"
@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/amazonsqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
 )
@@ -34,15 +33,15 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 		Endpoint: aws.String("http://localhost:9324"),
 	}
 
-	pub, err := amazonsqs.NewPublisher(amazonsqs.PublisherConfig{
+	pub, err := NewPublisher(PublisherConfig{
 		AWSConfig: cfg,
-		Marshaler: amazonsqs.DefaultMarshalerUnmarshaler{},
+		Marshaler: DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 
-	sub, err := amazonsqs.NewSubsciber(amazonsqs.SubscriberConfig{
+	sub, err := NewSubsciber(SubscriberConfig{
 		AWSConfig:   cfg,
-		Unmarshaler: amazonsqs.DefaultMarshalerUnmarshaler{},
+		Unmarshaler: DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 

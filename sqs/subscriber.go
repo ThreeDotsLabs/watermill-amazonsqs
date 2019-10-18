@@ -1,7 +1,8 @@
-package amazonsqs
+package sqs
 
 import (
 	"context"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -9,7 +10,14 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 )
+
+type SubscriberConfig struct {
+	AWSConfig   aws.Config
+	Unmarshaler UnMarshaler
+}
 
 type Subscriber struct {
 	config SubscriberConfig
@@ -17,13 +25,8 @@ type Subscriber struct {
 	sqs    *sqs.SQS
 }
 
-type SubscriberConfig struct {
-	AWSConfig   aws.Config
-	Unmarshaler Unmarshaler
-}
-
 func NewSubsciber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Subscriber, error) {
-	config.AWSConfig = SetEndPoint(config.AWSConfig)
+	config.AWSConfig = connection.SetEndPoint(config.AWSConfig)
 	return &Subscriber{
 		config: config,
 		logger: logger,
