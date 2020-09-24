@@ -1,4 +1,4 @@
-module github.com/ThreeDotsLabs/watermill-amazonsqs
+module github.com/m110/watermill-amazonsqs
 
 go 1.12
 
