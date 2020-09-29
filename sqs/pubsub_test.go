@@ -30,7 +30,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 
 	cfg := aws.Config{
 		Region:   aws.String("eu-north-1"),
-		Endpoint: aws.String("http://localhost:9324"),
+		Endpoint: aws.String("http://localhost:4100"),
 	}
 
 	pub, err := NewPublisher(PublisherConfig{
