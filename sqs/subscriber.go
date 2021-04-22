@@ -71,6 +71,9 @@ func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *m
 	result, err := s.sqs.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
 		WaitTimeSeconds: aws.Int64(1),
 		QueueUrl:        aws.String(queueURL),
+		MessageAttributeNames: []*string{
+			aws.String(sqs.QueueAttributeNameAll),
+		},
 	})
 	if err != nil {
 		return err
@@ -109,7 +112,6 @@ func (s Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptH
 		QueueUrl:      aws.String(queueURL),
 		ReceiptHandle: receiptHandle,
 	})
-
 	if err != nil {
 		// TODO wrap
 		return err
