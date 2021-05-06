@@ -54,7 +54,7 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 			return err
 		}
 
-		p.logger.Info("Sending message", watermill.LogFields{"msg": msg})
+		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
 		_, err = p.sqs.SendMessage(&sqs.SendMessageInput{
 			QueueUrl:          result.QueueUrl,
 			MessageAttributes: sqsMsg.MessageAttributes,
