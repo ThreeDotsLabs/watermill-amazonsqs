@@ -46,7 +46,7 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 	}
 
 	for _, msg := range messages {
-		p.logger.Info("Sending message", watermill.LogFields{"msg": msg})
+		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
 		_, err = p.sns.Publish(&sns.PublishInput{
 			TopicArn: topicInfo.TopicArn,
 			Message:  aws.String(string(msg.Payload)),
