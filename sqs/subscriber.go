@@ -2,16 +2,14 @@ package sqs
 
 import (
 	"context"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	"errors"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
-
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
 type SubscriberConfig struct {
@@ -22,7 +20,7 @@ type SubscriberConfig struct {
 type Subscriber struct {
 	config SubscriberConfig
 	logger watermill.LoggerAdapter
-	sqs    *sqs.SQS
+	sqs    *sqs.Client
 }
 
 func NewSubsciber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Subscriber, error) {
@@ -36,13 +34,7 @@ func NewSubsciber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Sub
 func (s Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	// TODO context cancel
 
-	sess, err := session.NewSession(&s.config.AWSConfig)
-	if err != nil {
-		// TODO wrap
-		return nil, err
-	}
-
-	s.sqs = sqs.New(sess)
+	s.sqs = sqs.NewFromConfig(s.config.AWSConfig)
 
 	output := make(chan *message.Message)
 
@@ -68,11 +60,11 @@ func (s Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messag
 }
 
 func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *message.Message) error {
-	result, err := s.sqs.ReceiveMessageWithContext(ctx, &sqs.ReceiveMessageInput{
-		WaitTimeSeconds: aws.Int64(1),
+	result, err := s.sqs.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
+		WaitTimeSeconds: 1,
 		QueueUrl:        aws.String(queueURL),
-		MessageAttributeNames: []*string{
-			aws.String(sqs.QueueAttributeNameAll),
+		MessageAttributeNames: []string{
+			string(types.QueueAttributeNameAll),
 		},
 	})
 	if err != nil {
@@ -108,7 +100,7 @@ func (s Subscriber) receive(ctx context.Context, queueURL string, output chan *m
 }
 
 func (s Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptHandle *string) error {
-	_, err := s.sqs.DeleteMessageWithContext(ctx, &sqs.DeleteMessageInput{
+	_, err := s.sqs.DeleteMessage(ctx, &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(queueURL),
 		ReceiptHandle: receiptHandle,
 	})
@@ -122,13 +114,9 @@ func (s Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptH
 
 func (s Subscriber) SubscribeInitialize(topic string) error {
 	// TODO move
-	sess, err := session.NewSession(&s.config.AWSConfig)
-	if err != nil {
-		return err
-	}
-	s.sqs = sqs.New(sess)
+	s.sqs = sqs.NewFromConfig(s.config.AWSConfig)
 
-	_, err = s.queueURL(topic)
+	_, err := s.queueURL(topic)
 	return err
 }
 
@@ -138,7 +126,7 @@ func (s Subscriber) queueURL(topic string) (string, error) {
 
 	s.logger.Trace("Getting queue URL", nil)
 
-	result, err := s.sqs.GetQueueUrl(&sqs.GetQueueUrlInput{
+	result, err := s.sqs.GetQueueUrl(context.Background(), &sqs.GetQueueUrlInput{
 		QueueName: aws.String(queueName),
 	})
 
@@ -147,9 +135,11 @@ func (s Subscriber) queueURL(topic string) (string, error) {
 		return *result.QueueUrl, nil
 	}
 
-	if awsError, ok := err.(awserr.Error); ok && awsError.Code() == sqs.ErrCodeQueueDoesNotExist {
+	var queueDoesNotExist *types.QueueDoesNotExist
+
+	if errors.As(err, &queueDoesNotExist) {
 		s.logger.Trace("Creating queue", nil)
-		createResult, err := s.sqs.CreateQueue(&sqs.CreateQueueInput{
+		createResult, err := s.sqs.CreateQueue(context.Background(), &sqs.CreateQueueInput{
 			// TODO attributes from config
 			QueueName: aws.String(queueName),
 		})

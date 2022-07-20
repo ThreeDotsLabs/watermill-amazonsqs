@@ -1,12 +1,12 @@
 package sns
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sns"
+	"context"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 )
@@ -18,19 +18,13 @@ type PublisherConfig struct {
 type Publisher struct {
 	config PublisherConfig
 	logger watermill.LoggerAdapter
-	sns    *sns.SNS
+	sns    *sns.Client
 }
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
 	config.AWSConfig = connection.SetEndPoint(config.AWSConfig)
-	sess, err := session.NewSession(&config.AWSConfig)
-	if err != nil {
-		// TODO wrap
-		return nil, err
-	}
-
 	return &Publisher{
-		sns:    sns.New(sess),
+		sns:    sns.NewFromConfig(config.AWSConfig),
 		config: config,
 		logger: logger,
 	}, nil
@@ -38,7 +32,7 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 
 func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 	// TODO method for generating
-	topicInfo, err := p.sns.CreateTopic(&sns.CreateTopicInput{
+	topicInfo, err := p.sns.CreateTopic(context.Background(), &sns.CreateTopicInput{
 		Name: aws.String(topic),
 	})
 	if err != nil {
@@ -47,7 +41,7 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 
 	for _, msg := range messages {
 		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
-		_, err = p.sns.Publish(&sns.PublishInput{
+		_, err = p.sns.Publish(context.Background(), &sns.PublishInput{
 			TopicArn: topicInfo.TopicArn,
 			Message:  aws.String(string(msg.Payload)),
 		})

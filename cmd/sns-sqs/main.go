@@ -8,7 +8,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
 )
@@ -16,8 +16,10 @@ import (
 func main() {
 	logger := watermill.NewStdLogger(true, true)
 
-	cfg := aws.Config{
-		Region: aws.String("eu-north-1"),
+	cfg, err := config.LoadDefaultConfig(context.Background(), config.WithRegion("eu-north-1"))
+
+	if err != nil {
+		panic(err)
 	}
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
@@ -28,7 +30,8 @@ func main() {
 	}
 
 	sub, err := sqs.NewSubsciber(sqs.SubscriberConfig{
-		AWSConfig: cfg,
+		AWSConfig:   cfg,
+		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {
 		panic(err)

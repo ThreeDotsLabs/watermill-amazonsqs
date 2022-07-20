@@ -6,7 +6,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 )
@@ -15,7 +15,7 @@ func main() {
 	logger := watermill.NewStdLogger(true, true)
 
 	cfg := aws.Config{
-		Region: aws.String("eu-north-1"),
+		Region: "eu-north-1",
 	}
 
 	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
