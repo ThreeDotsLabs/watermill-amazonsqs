@@ -1,12 +1,16 @@
 package sqs
 
 import (
+	"context"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
 )
@@ -26,21 +30,38 @@ func TestPublishSubscribe(t *testing.T) {
 }
 
 func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
-	logger := watermill.NewStdLogger(true, true)
+	logger := watermill.NewStdLogger(false, false)
 
-	cfg := aws.Config{
-		Region:   aws.String("eu-north-1"),
-		Endpoint: aws.String("http://localhost:4100"),
-	}
+	cfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("us-west-2"),
+		awsconfig.WithCredentialsProvider(credentials.StaticCredentialsProvider{
+			Value: aws.Credentials{
+				AccessKeyID:     "test",
+				SecretAccessKey: "test",
+			},
+		}),
+		connection.SetEndPoint("http://localhost:4100"),
+	)
+	require.NoError(t, err)
 
-	pub, err := NewPublisher(PublisherConfig{
+	pub, err := NewPublisher(context.Background(), PublisherConfig{
 		AWSConfig: cfg,
-		Marshaler: DefaultMarshalerUnmarshaler{},
+		CreateQueueConfig: QueueConfigAtrributes{
+			// Defalt value is 30 seconds - need to be lower for tests
+			VisibilityTimeout: "1",
+		},
+		CreateQueueIfNotExists: true,
+		Marshaler:              DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 
-	sub, err := NewSubsciber(SubscriberConfig{
-		AWSConfig:   cfg,
+	sub, err := NewSubscriber(SubscriberConfig{
+		AWSConfig: cfg,
+		CreateQueueInitializerConfig: QueueConfigAtrributes{
+			// Defalt value is 30 seconds - need to be lower for tests
+			VisibilityTimeout: "1",
+		},
 		Unmarshaler: DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)

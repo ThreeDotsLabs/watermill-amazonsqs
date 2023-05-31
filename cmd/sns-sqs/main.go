@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"os"
 	"time"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
 )
@@ -16,18 +18,24 @@ import (
 func main() {
 	logger := watermill.NewStdLogger(true, true)
 
-	cfg := aws.Config{
-		Region: aws.String("eu-north-1"),
+	cfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("eu-north-1"),
+		connection.SetEndPoint(os.Getenv("AWS_SNS_ENDPOINT")),
+	)
+	if err != nil {
+		panic(err)
 	}
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
-		AWSConfig: cfg,
+		AWSConfig:             cfg,
+		CreateTopicfNotExists: true,
 	}, logger)
 	if err != nil {
 		panic(err)
 	}
 
-	sub, err := sqs.NewSubsciber(sqs.SubscriberConfig{
+	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: cfg,
 	}, logger)
 	if err != nil {

@@ -2,39 +2,51 @@ package main
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 )
 
 func main() {
-	logger := watermill.NewStdLogger(true, true)
-
-	cfg := aws.Config{
-		Region: aws.String("eu-north-1"),
-	}
-
-	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
-		AWSConfig: cfg,
-		Marshaler: sqs.DefaultMarshalerUnmarshaler{},
-	}, logger)
-	if err != nil {
-		panic(err)
-	}
-
-	sub, err := sqs.NewSubsciber(sqs.SubscriberConfig{
-		AWSConfig:   cfg,
-		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
-	}, logger)
-	if err != nil {
-		panic(err)
-	}
-
 	ctx := context.Background()
+	logger := watermill.NewStdLogger(true, true)
+	cfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion("eu-north-1"),
+		connection.SetEndPoint(os.Getenv("AWS_SNS_ENDPOINT")),
+	)
+	if err != nil {
+		panic(err)
+	}
+	pub, err := sqs.NewPublisher(ctx, sqs.PublisherConfig{
+		AWSConfig:              cfg,
+		CreateQueueIfNotExists: true,
+		Marshaler:              sqs.DefaultMarshalerUnmarshaler{},
+	}, logger)
+	if err != nil {
+		panic(err)
+	}
+	_ = pub
+
+	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
+		AWSConfig:                    cfg,
+		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{},
+		Unmarshaler:                  sqs.DefaultMarshalerUnmarshaler{},
+	}, logger)
+	if err != nil {
+		panic(err)
+	}
+
+	err = sub.SubscribeInitialize("any-topic")
+	if err != nil {
+		panic(err)
+	}
 
 	messages, err := sub.Subscribe(ctx, "any-topic")
 	if err != nil {
