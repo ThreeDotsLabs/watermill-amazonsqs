@@ -45,7 +45,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 	)
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(context.Background(), PublisherConfig{
+	pub, err := NewPublisher(PublisherConfig{
 		AWSConfig: cfg,
 		CreateQueueConfig: QueueConfigAtrributes{
 			// Defalt value is 30 seconds - need to be lower for tests

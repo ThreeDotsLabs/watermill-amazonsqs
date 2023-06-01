@@ -22,7 +22,7 @@ type Publisher struct {
 	sqs    *sqs.Client
 }
 
-func NewPublisher(ctx context.Context, config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
+func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
 	config.setDefaults()
 	return &Publisher{
 		sqs:    sqs.NewFromConfig(config.AWSConfig),

@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	pub, err := sqs.NewPublisher(ctx, sqs.PublisherConfig{
+	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig:              cfg,
 		CreateQueueIfNotExists: true,
 		Marshaler:              sqs.DefaultMarshalerUnmarshaler{},
