@@ -43,15 +43,17 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 		// Real messageId are generated on server side
 		// so we can set our own here so we can use it in the tests
 		// There is a deduplicationId but just for FIFO queues
-		attributes := metadataToAttributes(msg.Metadata)
+		attributes, deduplicationId, groupId := metadataToAttributes(msg.Metadata)
 		attributes["UUID"] = types.MessageAttributeValue{
 			StringValue: aws.String(msg.UUID),
 			DataType:    aws.String("String"),
 		}
 		_, err = p.sns.Publish(ctx, &sns.PublishInput{
-			TopicArn:          topicArn,
-			Message:           aws.String(string(msg.Payload)),
-			MessageAttributes: attributes,
+			TopicArn:               topicArn,
+			Message:                aws.String(string(msg.Payload)),
+			MessageAttributes:      attributes,
+			MessageDeduplicationId: deduplicationId,
+			MessageGroupId:         groupId,
 		})
 		if err != nil {
 			return err
@@ -81,15 +83,24 @@ func (p Publisher) Close() error {
 	return nil
 }
 
-func metadataToAttributes(meta message.Metadata) map[string]types.MessageAttributeValue {
+func metadataToAttributes(meta message.Metadata) (map[string]types.MessageAttributeValue, *string, *string) {
 	attributes := make(map[string]types.MessageAttributeValue)
-
+	var deduplicationId, groupId *string
 	for k, v := range meta {
+		// SNS has special attributes for deduplication and group id
+		if k == "MessageDeduplicationId" {
+			deduplicationId = aws.String(v)
+			continue
+		}
+		if k == "MessageGroupId" {
+			groupId = aws.String(v)
+			continue
+		}
 		attributes[k] = types.MessageAttributeValue{
 			StringValue: aws.String(v),
 			DataType:    aws.String("String"),
 		}
 	}
 
-	return attributes
+	return attributes, deduplicationId, groupId
 }
