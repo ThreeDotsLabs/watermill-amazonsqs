@@ -1,4 +1,4 @@
-package sns
+package sns_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
 )
 
 func TestCreatePub(t *testing.T) {
@@ -31,7 +32,7 @@ func TestCreatePub(t *testing.T) {
 
 	require.NoError(t, err)
 
-	_, err = NewPublisher(PublisherConfig{
+	_, err = sns.NewPublisher(sns.PublisherConfig{
 		AWSConfig: cfg,
 	}, logger)
 

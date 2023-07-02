@@ -1,7 +1,8 @@
-package sqs
+package sqs_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -11,12 +12,29 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
 )
 
 func TestPublishSubscribe(t *testing.T) {
 	tests.TestPubSub(
+		t,
+		tests.Features{
+			ConsumerGroups:      false,
+			ExactlyOnceDelivery: false,
+			GuaranteedOrder:     false,
+			Persistent:          true,
+		},
+		createPubSub,
+		createPubSubWithConsumerGroup,
+	)
+}
+
+func TestPublishSubscribe_stress(t *testing.T) {
+	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) * 2)
+
+	tests.TestPubSubStressTest(
 		t,
 		tests.Features{
 			ConsumerGroups:      false,
@@ -45,24 +63,24 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 	)
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(PublisherConfig{
+	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig: cfg,
-		CreateQueueConfig: QueueConfigAtrributes{
+		CreateQueueConfig: sqs.QueueConfigAtrributes{
 			// Defalt value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
 		CreateQueueIfNotExists: true,
-		Marshaler:              DefaultMarshalerUnmarshaler{},
+		Marshaler:              sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 
-	sub, err := NewSubscriber(SubscriberConfig{
+	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: cfg,
-		CreateQueueInitializerConfig: QueueConfigAtrributes{
+		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{
 			// Defalt value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
-		Unmarshaler: DefaultMarshalerUnmarshaler{},
+		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 
