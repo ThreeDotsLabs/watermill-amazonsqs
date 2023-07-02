@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/aws/smithy-go"
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -150,7 +151,6 @@ func (s *Subscriber) ConsumeMessages(
 			err := s.deleteMessage(ctx, queueURL, sqsMsg.ReceiptHandle)
 			if err != nil {
 				s.logger.Error("Failed to delete message", err, logFields)
-				// TODO handle
 				return
 			}
 		case <-msg.Nacked():
@@ -172,7 +172,13 @@ func (s *Subscriber) deleteMessage(ctx context.Context, queueURL string, receipt
 	})
 
 	if err != nil {
-		// TODO wrap
+		var oe *smithy.GenericAPIError
+		if errors.As(err, &oe) {
+			if oe.Message == "The specified queue does not contain the message specified." {
+				// Message was already deleted or is not in queue
+				return nil
+			}
+		}
 		return err
 	}
 
