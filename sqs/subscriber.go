@@ -205,6 +205,11 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 	return err
 }
 
+func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
+	queueUrl, err := GetQueueUrl(ctx, s.sqs, topic)
+	return queueUrl, err
+}
+
 const NoSleep time.Duration = -1
 
 func (c *SubscriberConfig) SetDefaults() {
