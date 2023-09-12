@@ -36,10 +36,10 @@ func (d DefaultMarshalerUnmarshaler) Marshal(msg *message.Message) (*types.Messa
 
 func (d DefaultMarshalerUnmarshaler) Unmarshal(msg *types.Message) (*message.Message, error) {
 	var uuid, payload string
-	atributes := attributesToMetadata(msg.MessageAttributes)
+	attributes := attributesToMetadata(msg.MessageAttributes)
 	if value, ok := msg.MessageAttributes[UUIDAttribute]; ok {
 		uuid = *value.StringValue
-		delete(atributes, UUIDAttribute)
+		delete(attributes, UUIDAttribute)
 	}
 
 	if msg.Body != nil {
@@ -47,7 +47,7 @@ func (d DefaultMarshalerUnmarshaler) Unmarshal(msg *types.Message) (*message.Mes
 	}
 
 	wmsg := message.NewMessage(uuid, []byte(payload))
-	wmsg.Metadata = atributes
+	wmsg.Metadata = attributes
 
 	return wmsg, nil
 }
