@@ -1,35 +1,45 @@
 package sqs
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+const UUIDAttribute = "UUID"
+
 type Marshaler interface {
-	Marshal(msg *message.Message) (*sqs.Message, error)
+	Marshal(msg *message.Message) (*types.Message, error)
 }
 
 type UnMarshaler interface {
-	Unmarshal(msg *sqs.Message) (*message.Message, error)
+	Unmarshal(msg *types.Message) (*message.Message, error)
 }
 
 type DefaultMarshalerUnmarshaler struct{}
 
-func (d DefaultMarshalerUnmarshaler) Marshal(msg *message.Message) (*sqs.Message, error) {
-	return &sqs.Message{
-		MessageAttributes: metadataToAttributes(msg.Metadata),
+func (d DefaultMarshalerUnmarshaler) Marshal(msg *message.Message) (*types.Message, error) {
+	attributes := metadataToAttributes(msg.Metadata)
+	// client side uuid
+	// there is a deduplication id that can be use for
+	// fifo queues
+	attributes[UUIDAttribute] = types.MessageAttributeValue{
+		StringValue: aws.String(msg.UUID),
+		DataType:    aws.String(AWSStringDataType),
+	}
+	return &types.Message{
+		MessageAttributes: attributes,
 		Body:              aws.String(string(msg.Payload)),
-		MessageId:         aws.String(msg.UUID),
 	}, nil
 }
 
-func (d DefaultMarshalerUnmarshaler) Unmarshal(msg *sqs.Message) (*message.Message, error) {
+func (d DefaultMarshalerUnmarshaler) Unmarshal(msg *types.Message) (*message.Message, error) {
 	var uuid, payload string
-
-	if msg.MessageId != nil {
-		uuid = *msg.MessageId
+	attributes := attributesToMetadata(msg.MessageAttributes)
+	if value, ok := msg.MessageAttributes[UUIDAttribute]; ok {
+		uuid = *value.StringValue
+		delete(attributes, UUIDAttribute)
 	}
 
 	if msg.Body != nil {
@@ -37,16 +47,16 @@ func (d DefaultMarshalerUnmarshaler) Unmarshal(msg *sqs.Message) (*message.Messa
 	}
 
 	wmsg := message.NewMessage(uuid, []byte(payload))
-	wmsg.Metadata = attributesToMetadata(msg.MessageAttributes)
+	wmsg.Metadata = attributes
 
 	return wmsg, nil
 }
 
-func metadataToAttributes(meta message.Metadata) map[string]*sqs.MessageAttributeValue {
-	attributes := make(map[string]*sqs.MessageAttributeValue)
+func metadataToAttributes(meta message.Metadata) map[string]types.MessageAttributeValue {
+	attributes := make(map[string]types.MessageAttributeValue)
 
 	for k, v := range meta {
-		attributes[k] = &sqs.MessageAttributeValue{
+		attributes[k] = types.MessageAttributeValue{
 			StringValue: aws.String(v),
 			DataType:    aws.String(AWSStringDataType),
 		}
@@ -55,7 +65,7 @@ func metadataToAttributes(meta message.Metadata) map[string]*sqs.MessageAttribut
 	return attributes
 }
 
-func attributesToMetadata(attributes map[string]*sqs.MessageAttributeValue) message.Metadata {
+func attributesToMetadata(attributes map[string]types.MessageAttributeValue) message.Metadata {
 	meta := make(message.Metadata)
 
 	for k, v := range attributes {

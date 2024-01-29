@@ -1,53 +1,42 @@
 package sqs
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	"context"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 type PublisherConfig struct {
-	AWSConfig aws.Config
-	Marshaler Marshaler
+	AWSConfig              aws.Config
+	CreateQueueConfig      QueueConfigAtrributes
+	CreateQueueIfNotExists bool
+	Marshaler              Marshaler
 }
 
 type Publisher struct {
 	config PublisherConfig
 	logger watermill.LoggerAdapter
-	sqs    *sqs.SQS
+	sqs    *sqs.Client
 }
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
-	config.AWSConfig = connection.SetEndPoint(config.AWSConfig)
-	sess, err := session.NewSession(&config.AWSConfig)
-	if err != nil {
-		// TODO wrap
-		return nil, err
-	}
-
+	config.setDefaults()
 	return &Publisher{
-		sqs:    sqs.New(sess),
+		sqs:    sqs.NewFromConfig(config.AWSConfig),
 		config: config,
 		logger: logger,
 	}, nil
 }
 
 func (p Publisher) Publish(topic string, messages ...*message.Message) error {
-	// TODO method for generating
-	queueName := topic
-
-	result, err := p.sqs.GetQueueUrl(&sqs.GetQueueUrlInput{
-		QueueName: aws.String(queueName),
-	})
+	ctx := context.Background()
+	queueUrl, err := p.GetQueueUrl(ctx, topic)
 	if err != nil {
 		return err
 	}
-
 	for _, msg := range messages {
 		sqsMsg, err := p.config.Marshaler.Marshal(msg)
 		if err != nil {
@@ -55,8 +44,8 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 		}
 
 		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
-		_, err = p.sqs.SendMessage(&sqs.SendMessageInput{
-			QueueUrl:          result.QueueUrl,
+		_, err = p.sqs.SendMessage(ctx, &sqs.SendMessageInput{
+			QueueUrl:          queueUrl,
 			MessageAttributes: sqsMsg.MessageAttributes,
 			MessageBody:       sqsMsg.Body,
 		})
@@ -68,6 +57,28 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 	return nil
 }
 
+func (p Publisher) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
+	queueUrl, err := GetQueueUrl(ctx, p.sqs, topic)
+	if err != nil {
+		if p.config.CreateQueueIfNotExists {
+			queueUrl, err = CreateQueue(ctx, p.sqs, topic, sqs.CreateQueueInput{
+				Attributes: p.config.CreateQueueConfig.Attributes(),
+			})
+			if err == nil {
+				return queueUrl, nil
+			}
+		}
+		return nil, err
+	}
+	return queueUrl, nil
+}
+
 func (p Publisher) Close() error {
 	return nil
+}
+
+func (c *PublisherConfig) setDefaults() {
+	if c.Marshaler == nil {
+		c.Marshaler = DefaultMarshalerUnmarshaler{}
+	}
 }
