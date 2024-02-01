@@ -62,11 +62,15 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	sqsArn, err := sub.GetQueueArn(ctx, sqsUrl)
+	if err != nil {
+		panic(err)
+	}
 
 	err = pub.AddSubscription(ctx, &awssns.SubscribeInput{
 		Protocol: aws.String("sqs"),
 		TopicArn: pubArn,
-		Endpoint: sqsUrl,
+		Endpoint: sqsArn,
 		Attributes: map[string]string{
 			"RawMessageDelivery": "true",
 		},
