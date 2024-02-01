@@ -73,6 +73,10 @@ func (p Publisher) GetQueueUrl(ctx context.Context, topic string) (*string, erro
 	return queueUrl, nil
 }
 
+func (p Publisher) GetQueueArn(ctx context.Context, url *string) (*string, error) {
+	return GetARNUrl(ctx, p.sqs, url)
+}
+
 func (p Publisher) Close() error {
 	return nil
 }

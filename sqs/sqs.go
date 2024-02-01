@@ -67,3 +67,19 @@ func GetOrCreateQueue(ctx context.Context, sqsClient *sqs.Client, topic string, 
 	}
 	return queueUrl, nil
 }
+
+func GetARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string, error) {
+	attrResult, err := sqsClient.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
+		QueueUrl: url,
+		AttributeNames: []types.QueueAttributeName{
+			types.QueueAttributeNameQueueArn,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cannot get ARN queue %s: %w", url, err)
+	}
+
+	arn := attrResult.Attributes[string(types.QueueAttributeNameQueueArn)]
+
+	return &arn, nil
+}
