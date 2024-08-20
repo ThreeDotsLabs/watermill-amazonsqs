@@ -10,22 +10,33 @@ import (
 )
 
 type QueueConfigAttributes struct {
-	DelaySeconds                  string `mapstructure:"DelaySeconds,omitempty"`
-	MaximumMessageSize            string `mapstructure:"MaximumMessageSize,omitempty"`
-	MessageRetentionPeriod        string `mapstructure:"MessageRetentionPeriod,omitempty"`
-	Policy                        string `mapstructure:"Policy,omitempty"`
-	ReceiveMessageWaitTimeSeconds string `mapstructure:"ReceiveMessageWaitTimeSeconds,omitempty"`
-	RedrivePolicy                 string `mapstructure:"RedrivePolicy,omitempty"`
-	DeadLetterTargetArn           string `mapstructure:"deadLetterTargetArn,omitempty"`
-	MaxReceiveCount               string `mapstructure:"maxReceiveCount,omitempty"`
-	VisibilityTimeout             string `mapstructure:"VisibilityTimeout,omitempty"`
-	KmsMasterKeyId                string `mapstructure:"KmsMasterKeyId,omitempty"`
-	KmsDataKeyReusePeriodSeconds  string `mapstructure:"KmsDataKeyReusePeriodSeconds,omitempty"`
-	SqsManagedSseEnabled          string `mapstructure:"SqsManagedSseEnabled,omitempty"`
-	FifoQueue                     bool   `mapstructure:"FifoQueue,omitempty"`
-	ContentBasedDeduplication     bool   `mapstructure:"ContentBasedDeduplication,omitempty"`
-	DeduplicationScope            string `mapstructure:"DeduplicationScope,omitempty"`
-	FifoThroughputLimit           string `mapstructure:"FifoThroughputLimit,omitempty"`
+	DelaySeconds                  string                    `json:"DelaySeconds,omitempty"`
+	MaximumMessageSize            string                    `json:"MaximumMessageSize,omitempty"`
+	MessageRetentionPeriod        string                    `json:"MessageRetentionPeriod,omitempty"`
+	Policy                        string                    `json:"Policy,omitempty"`
+	ReceiveMessageWaitTimeSeconds string                    `json:"ReceiveMessageWaitTimeSeconds,omitempty"`
+	RedrivePolicy                 string                    `json:"RedrivePolicy,omitempty"`
+	DeadLetterTargetArn           string                    `json:"deadLetterTargetArn,omitempty"`
+	MaxReceiveCount               string                    `json:"maxReceiveCount,omitempty"`
+	VisibilityTimeout             string                    `json:"VisibilityTimeout,omitempty"`
+	KmsMasterKeyId                string                    `json:"KmsMasterKeyId,omitempty"`
+	KmsDataKeyReusePeriodSeconds  string                    `json:"KmsDataKeyReusePeriodSeconds,omitempty"`
+	SqsManagedSseEnabled          string                    `json:"SqsManagedSseEnabled,omitempty"`
+	FifoQueue                     QueueConfigAttributesBool `json:"FifoQueue,omitempty"`
+	ContentBasedDeduplication     QueueConfigAttributesBool `json:"ContentBasedDeduplication,omitempty"`
+	DeduplicationScope            string                    `json:"DeduplicationScope,omitempty"`
+	FifoThroughputLimit           string                    `json:"FifoThroughputLimit,omitempty"`
+}
+
+// QueueConfigAttributesBool is a custom type for bool values in QueueConfigAttributes
+// that supports marshaling to string.
+type QueueConfigAttributesBool bool
+
+func (q QueueConfigAttributesBool) MarshalText() ([]byte, error) {
+	if q {
+		return []byte("true"), nil
+	}
+	return []byte("false"), nil
 }
 
 func (q QueueConfigAttributes) Attributes() (map[string]string, error) {
@@ -70,6 +81,10 @@ func greateQueue(ctx context.Context, sqsClient *sqs.Client, createQueueParams *
 }
 
 func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string, error) {
+	if url == nil {
+		return nil, fmt.Errorf("queue URL is nil")
+	}
+
 	attrResult, err := sqsClient.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 		QueueUrl: url,
 		AttributeNames: []types.QueueAttributeName{
@@ -77,7 +92,7 @@ func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("cannot get ARN queue %s: %w", url, err)
+		return nil, fmt.Errorf("cannot get ARN queue %s: %w", *url, err)
 	}
 
 	arn := attrResult.Attributes[string(types.QueueAttributeNameQueueArn)]
