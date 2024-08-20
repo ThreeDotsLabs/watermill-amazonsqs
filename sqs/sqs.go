@@ -32,7 +32,7 @@ func (q QueueConfigAttributes) Attributes() (map[string]string, error) {
 	var m map[string]string
 
 	// todo: test
-	err := mapstructure.Decode(q, &m)
+	err := mapstructure.WeakDecode(q, &m)
 	if err != nil {
 		return nil, fmt.Errorf("cannot decode queue attributes: %w", err)
 	}
