@@ -36,7 +36,7 @@ func main() {
 
 	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig:                    cfg,
-		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{},
+		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{},
 		Unmarshaler:                  sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {

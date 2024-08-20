@@ -2,19 +2,12 @@ package sqs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
-
-type PublisherConfig struct {
-	AWSConfig              aws.Config
-	CreateQueueConfig      QueueConfigAtrributes
-	CreateQueueIfNotExists bool
-	Marshaler              Marshaler
-}
 
 type Publisher struct {
 	config PublisherConfig
@@ -24,6 +17,7 @@ type Publisher struct {
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
 	config.setDefaults()
+
 	return &Publisher{
 		sqs:    sqs.NewFromConfig(config.AWSConfig),
 		config: config,
@@ -33,24 +27,32 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 
 func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 	ctx := context.Background()
+
+	// todo: cache it
 	queueUrl, err := p.GetQueueUrl(ctx, topic)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot get queue url: %w", err)
 	}
+	if queueUrl == nil {
+		return fmt.Errorf("returned queueUrl is nil")
+	}
+
 	for _, msg := range messages {
 		sqsMsg, err := p.config.Marshaler.Marshal(msg)
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot marshal message: %w", err)
 		}
 
 		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
-		_, err = p.sqs.SendMessage(ctx, &sqs.SendMessageInput{
-			QueueUrl:          queueUrl,
-			MessageAttributes: sqsMsg.MessageAttributes,
-			MessageBody:       sqsMsg.Body,
-		})
+
+		input, err := p.config.GenerateSendMessageInput(ctx, *queueUrl, sqsMsg)
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot generate send message input: %w", err)
+		}
+
+		_, err = p.sqs.SendMessage(ctx, input)
+		if err != nil {
+			return fmt.Errorf("cannot send message: %w", err)
 		}
 	}
 
@@ -58,12 +60,16 @@ func (p Publisher) Publish(topic string, messages ...*message.Message) error {
 }
 
 func (p Publisher) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
-	queueUrl, err := GetQueueUrl(ctx, p.sqs, topic)
+	queueUrl, err := getQueueUrl(ctx, p.sqs, topic, p.config.GenerateGetQueueUrlInput)
 	if err != nil {
+		// todo: check exact error here
 		if p.config.CreateQueueIfNotExists {
-			queueUrl, err = CreateQueue(ctx, p.sqs, topic, sqs.CreateQueueInput{
-				Attributes: p.config.CreateQueueConfig.Attributes(),
-			})
+			input, err := p.config.GenerateCreateQueueInput(ctx, topic, p.config.CreateQueueConfig)
+			if err != nil {
+				return nil, fmt.Errorf("cannot generate create queue input: %w", err)
+			}
+
+			queueUrl, err = greateQueue(ctx, p.sqs, input)
 			if err == nil {
 				return queueUrl, nil
 			}
@@ -74,15 +80,11 @@ func (p Publisher) GetQueueUrl(ctx context.Context, topic string) (*string, erro
 }
 
 func (p Publisher) GetQueueArn(ctx context.Context, url *string) (*string, error) {
-	return GetARNUrl(ctx, p.sqs, url)
+	return getARNUrl(ctx, p.sqs, url)
 }
 
 func (p Publisher) Close() error {
 	return nil
 }
 
-func (c *PublisherConfig) setDefaults() {
-	if c.Marshaler == nil {
-		c.Marshaler = DefaultMarshalerUnmarshaler{}
-	}
-}
+// todo: missing validate?

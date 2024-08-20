@@ -65,7 +65,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 
 	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig: cfg,
-		CreateQueueConfig: sqs.QueueConfigAtrributes{
+		CreateQueueConfig: sqs.QueueConfigAttributes{
 			// Defalt value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
@@ -76,7 +76,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 
 	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: cfg,
-		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{
+		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
 			// Defalt value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},

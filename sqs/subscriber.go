@@ -3,28 +3,16 @@ package sqs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/aws/smithy-go"
-	"github.com/hashicorp/go-multierror"
-
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill/message"
 )
-
-type SubscriberConfig struct {
-	AWSConfig aws.Config
-	// How long about unsuccessful reconnecting next reconnect will occur.
-	ReconnectRetrySleep time.Duration
-	// Delete message attemps
-	CreateQueueInitializerConfig QueueConfigAtrributes
-
-	Unmarshaler UnMarshaler
-}
 
 type Subscriber struct {
 	config SubscriberConfig
@@ -64,20 +52,44 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		return nil, errors.New("subscriber closed")
 	}
 
+	s.logger.With(watermill.LogFields{"topic": topic}).Trace("Getting queue", nil)
+
 	ctx, cancel := context.WithCancel(ctx)
 	output := make(chan *message.Message)
 
-	queueURL, err := GetQueueUrl(ctx, s.sqs, topic)
+	queueURL, err := getQueueUrl(ctx, s.sqs, topic, s.config.GenerateGetQueueUrlInput)
 	if err != nil {
+		// todo: should be logged later
+		// todo: better err handling
+		s.logger.With(watermill.LogFields{
+			"queue": queueURL,
+			"topic": topic,
+		}).Error("Failed to get queue", err, nil)
+
 		close(output)
 		cancel()
 		return nil, err
 	}
+	if queueURL == nil {
+		s.logger.With(watermill.LogFields{"topic": topic}).Trace("Queue not found", nil)
+		close(output)
+		cancel()
+		return nil, fmt.Errorf("queue %s not found", topic)
+	}
+
+	receiveInput, err := s.config.GenerateReceiveMessageInput(ctx, *queueURL)
+	if err != nil {
+		close(output)
+		cancel()
+		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	}
+
+	s.logger.With(watermill.LogFields{"queue": queueURL}).Trace("Subscribing to queue", nil)
 
 	s.subscribersWg.Add(1)
 
 	go func() {
-		s.receive(ctx, *queueURL, output)
+		s.receive(ctx, *queueURL, output, receiveInput)
 		close(output)
 		cancel()
 	}()
@@ -85,7 +97,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 	return output, nil
 }
 
-func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *message.Message) {
+func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *message.Message, input *sqs.ReceiveMessageInput) {
 	defer s.subscribersWg.Done()
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
@@ -98,29 +110,28 @@ func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *
 	for {
 		select {
 		case <-s.closing:
-			s.logger.Info("Discarding queued message, subscriber closing", logFields)
+			s.logger.Trace("Discarding queued message, subscriber closing", logFields)
 			return
 
 		case <-ctx.Done():
-			s.logger.Info("Stopping consume, context canceled", logFields)
+			s.logger.Trace("Stopping consume, context canceled", logFields)
 			return
 
 		case <-time.After(sleepTime): // Wait if needed
+			s.logger.Trace("Timeout?", logFields)
 		}
 
-		result, err := s.sqs.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
-			QueueUrl:              aws.String(queueURL),
-			MessageAttributeNames: []string{"All"},
-		})
+		result, err := s.sqs.ReceiveMessage(ctx, input)
 
 		if err != nil {
-			s.logger.Error("Cannot connect recieve messages", err, logFields)
+			s.logger.Error("Cannot connect receive messages", err, logFields)
 			sleepTime = s.config.ReconnectRetrySleep
 			continue
 		}
 
 		sleepTime = NoSleep
 		if result == nil || len(result.Messages) == 0 {
+			s.logger.Trace("No messages", logFields)
 			continue
 		}
 		s.ConsumeMessages(ctx, result.Messages, queueURL, output, logFields)
@@ -134,10 +145,13 @@ func (s *Subscriber) ConsumeMessages(
 	output chan *message.Message,
 	logFields watermill.LogFields,
 ) {
+	s.logger.Trace("ConsumeMessages", logFields)
 
 	for _, sqsMsg := range messages {
+		s.logger.Trace("ConsumeMessages", logFields)
+
 		ctx, cancelCtx := context.WithCancel(ctx)
-		defer cancelCtx()
+		defer cancelCtx() // todo: leak
 		msg, err := s.config.Unmarshaler.Unmarshal(&sqsMsg)
 		if err != nil {
 			s.logger.Error("Cannot unmarshal message", err, logFields)
@@ -166,16 +180,19 @@ func (s *Subscriber) ConsumeMessages(
 }
 
 func (s *Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptHandle *string) error {
-	_, err := s.sqs.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-		QueueUrl:      aws.String(queueURL),
-		ReceiptHandle: receiptHandle,
-	})
+	input, err := s.config.GenerateDeleteMessageInput(ctx, queueURL, receiptHandle)
+	if err != nil {
+		return fmt.Errorf("cannot generate input for delete message: %w", err)
+	}
+
+	_, err = s.sqs.DeleteMessage(ctx, input)
 
 	if err != nil {
 		var oe *smithy.GenericAPIError
 		if errors.As(err, &oe) {
 			if oe.Message == "The specified queue does not contain the message specified." {
 				// Message was already deleted or is not in queue
+				// todo: log?
 				return nil
 			}
 		}
@@ -199,43 +216,30 @@ func (s *Subscriber) Close() error {
 }
 
 func (s *Subscriber) SubscribeInitialize(topic string) error {
-	_, err := CreateQueue(context.Background(), s.sqs, topic, sqs.CreateQueueInput{
-		Attributes: s.config.CreateQueueInitializerConfig.Attributes(),
-	})
-	return err
+	return s.SubscribeInitializeWithContext(context.Background(), topic)
+}
+
+func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
+	input, err := s.config.GenerateCreateQueueInput(ctx, topic, s.config.CreateQueueInitializerConfig)
+	if err != nil {
+		return fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	}
+
+	_, err = greateQueue(ctx, s.sqs, input)
+	if err != nil {
+		return fmt.Errorf("cannot create queue %s: %w", topic, err)
+	}
+
+	return nil
 }
 
 func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
-	queueUrl, err := GetQueueUrl(ctx, s.sqs, topic)
+	queueUrl, err := getQueueUrl(ctx, s.sqs, topic, s.config.GenerateGetQueueUrlInput)
 	return queueUrl, err
 }
 
 func (s *Subscriber) GetQueueArn(ctx context.Context, url *string) (*string, error) {
-	return GetARNUrl(ctx, s.sqs, url)
+	return getARNUrl(ctx, s.sqs, url)
 }
 
 const NoSleep time.Duration = -1
-
-func (c *SubscriberConfig) SetDefaults() {
-
-	if c.Unmarshaler == nil {
-		c.Unmarshaler = DefaultMarshalerUnmarshaler{}
-	}
-
-	if c.ReconnectRetrySleep == 0 {
-		c.ReconnectRetrySleep = time.Second
-	}
-}
-func (c SubscriberConfig) Validate() error {
-	var err error
-
-	if c.AWSConfig.Credentials == nil {
-		err = multierror.Append(err, errors.New("missing Config.Credentials"))
-
-	}
-	if c.Unmarshaler == nil {
-		err = multierror.Append(err, errors.New("missing Config.Marshaler"))
-	}
-
-	return err
-}

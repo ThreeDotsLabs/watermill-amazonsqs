@@ -2,45 +2,51 @@ package sqs
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/mitchellh/mapstructure"
 )
 
-type QueueConfigAtrributes struct {
-	DelaySeconds                  string `json:"DelaySeconds,omitempty"`
-	MaximumMessageSize            string `json:"MaximumMessageSize,omitempty"`
-	MessageRetentionPeriod        string `json:"MessageRetentionPeriod,omitempty"`
-	Policy                        string `json:"Policy,omitempty"`
-	ReceiveMessageWaitTimeSeconds string `json:"ReceiveMessageWaitTimeSeconds,omitempty"`
-	RedrivePolicy                 string `json:"RedrivePolicy,omitempty"`
-	DeadLetterTargetArn           string `json:"deadLetterTargetArn,omitempty"`
-	MaxReceiveCount               string `json:"maxReceiveCount,omitempty"`
-	VisibilityTimeout             string `json:"VisibilityTimeout,omitempty"`
-	KmsMasterKeyId                string `json:"KmsMasterKeyId,omitempty"`
-	KmsDataKeyReusePeriodSeconds  string `json:"KmsDataKeyReusePeriodSeconds,omitempty"`
-	SqsManagedSseEnabled          string `json:"SqsManagedSseEnabled,omitempty"`
-	FifoQueue                     bool   `json:"FifoQueue,omitempty"`
-	ContentBasedDeduplication     bool   `json:"ContentBasedDeduplication,omitempty"`
-	DeduplicationScope            string `json:"DeduplicationScope,omitempty"`
-	FifoThroughputLimit           string `json:"FifoThroughputLimit,omitempty"`
+type QueueConfigAttributes struct {
+	DelaySeconds                  string `mapstructure:"DelaySeconds,omitempty"`
+	MaximumMessageSize            string `mapstructure:"MaximumMessageSize,omitempty"`
+	MessageRetentionPeriod        string `mapstructure:"MessageRetentionPeriod,omitempty"`
+	Policy                        string `mapstructure:"Policy,omitempty"`
+	ReceiveMessageWaitTimeSeconds string `mapstructure:"ReceiveMessageWaitTimeSeconds,omitempty"`
+	RedrivePolicy                 string `mapstructure:"RedrivePolicy,omitempty"`
+	DeadLetterTargetArn           string `mapstructure:"deadLetterTargetArn,omitempty"`
+	MaxReceiveCount               string `mapstructure:"maxReceiveCount,omitempty"`
+	VisibilityTimeout             string `mapstructure:"VisibilityTimeout,omitempty"`
+	KmsMasterKeyId                string `mapstructure:"KmsMasterKeyId,omitempty"`
+	KmsDataKeyReusePeriodSeconds  string `mapstructure:"KmsDataKeyReusePeriodSeconds,omitempty"`
+	SqsManagedSseEnabled          string `mapstructure:"SqsManagedSseEnabled,omitempty"`
+	FifoQueue                     bool   `mapstructure:"FifoQueue,omitempty"`
+	ContentBasedDeduplication     bool   `mapstructure:"ContentBasedDeduplication,omitempty"`
+	DeduplicationScope            string `mapstructure:"DeduplicationScope,omitempty"`
+	FifoThroughputLimit           string `mapstructure:"FifoThroughputLimit,omitempty"`
 }
 
-func (q QueueConfigAtrributes) Attributes() map[string]string {
-	b, _ := json.Marshal(q)
+func (q QueueConfigAttributes) Attributes() (map[string]string, error) {
 	var m map[string]string
-	_ = json.Unmarshal(b, &m)
-	return m
+
+	// todo: test
+	err := mapstructure.Decode(q, &m)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode queue attributes: %w", err)
+	}
+
+	return m, nil
 }
 
-func GetQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string) (*string, error) {
-	getQueueOutput, err := sqsClient.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
-		QueueName: aws.String(topic),
-	})
+func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, generateGetQueueUrlInput GenerateGetQueueUrlInputFunc) (*string, error) {
+	input, err := generateGetQueueUrlInput(ctx, topic)
+	if err != nil {
+		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	}
+
+	getQueueOutput, err := sqsClient.GetQueueUrl(ctx, input)
 
 	if err != nil || getQueueOutput.QueueUrl == nil {
 		return nil, fmt.Errorf("cannot get queue %s: %w", topic, err)
@@ -48,27 +54,19 @@ func GetQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string) (*str
 	return getQueueOutput.QueueUrl, nil
 }
 
-func CreateQueue(ctx context.Context, sqsClient *sqs.Client, topic string, createQueueParams sqs.CreateQueueInput) (*string, error) {
-	createQueueParams.QueueName = aws.String(topic)
-	createQueueOutput, err := sqsClient.CreateQueue(ctx, &createQueueParams)
-	if err != nil || createQueueOutput.QueueUrl == nil {
-		return nil, fmt.Errorf("cannot create queue %s: %w", topic, err)
+func greateQueue(ctx context.Context, sqsClient *sqs.Client, createQueueParams *sqs.CreateQueueInput) (*string, error) {
+	createQueueOutput, err := sqsClient.CreateQueue(ctx, createQueueParams)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create queue %w", err)
 	}
+	if createQueueOutput.QueueUrl == nil {
+		return nil, fmt.Errorf("cannot create queue, queueUrl is nil")
+	}
+
 	return createQueueOutput.QueueUrl, nil
 }
 
-func GetOrCreateQueue(ctx context.Context, sqsClient *sqs.Client, topic string, createQueueParams sqs.CreateQueueInput) (*string, error) {
-	queueUrl, err := GetQueueUrl(ctx, sqsClient, topic)
-	if err != nil || queueUrl == nil {
-		var qne *types.QueueDoesNotExist
-		if errors.As(err, &qne) {
-			return CreateQueue(ctx, sqsClient, topic, createQueueParams)
-		}
-	}
-	return queueUrl, nil
-}
-
-func GetARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string, error) {
+func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string, error) {
 	attrResult, err := sqsClient.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 		QueueUrl: url,
 		AttributeNames: []types.QueueAttributeName{

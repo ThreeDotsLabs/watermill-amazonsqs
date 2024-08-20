@@ -13,7 +13,7 @@ type Marshaler interface {
 	Marshal(msg *message.Message) (*types.Message, error)
 }
 
-type UnMarshaler interface {
+type Unmarshaler interface {
 	Unmarshal(msg *types.Message) (*message.Message, error)
 }
 
