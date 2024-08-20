@@ -2,11 +2,11 @@ package sqs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/mitchellh/mapstructure"
 )
 
 type QueueConfigAttributes struct {
@@ -29,12 +29,15 @@ type QueueConfigAttributes struct {
 }
 
 func (q QueueConfigAttributes) Attributes() (map[string]string, error) {
-	var m map[string]string
-
-	// todo: test
-	err := mapstructure.WeakDecode(q, &m)
+	b, err := json.Marshal(q)
 	if err != nil {
-		return nil, fmt.Errorf("cannot decode queue attributes: %w", err)
+		return nil, fmt.Errorf("cannot marshal queue attributes (json.Marshal): %w", err)
+	}
+
+	var m map[string]string
+	err = json.Unmarshal(b, &m)
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal queue attributes (json.Unmarshal): %w", err)
 	}
 
 	return m, nil
