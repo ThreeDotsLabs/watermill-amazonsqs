@@ -131,7 +131,7 @@ func GenerateReceiveMessageInputDefault(ctx context.Context, queueURL string) (*
 	return &sqs.ReceiveMessageInput{
 		QueueUrl:              aws.String(queueURL),
 		MessageAttributeNames: []string{"All"},
-		WaitTimeSeconds:       30,
+		WaitTimeSeconds:       20, // 20 is max at the moment
 	}, nil
 }
 
