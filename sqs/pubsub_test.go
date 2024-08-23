@@ -59,7 +59,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 				SecretAccessKey: "test",
 			},
 		}),
-		connection.SetEndPoint("http://localhost:4100"),
+		connection.SetEndPoint("http://localhost:4566"),
 	)
 	require.NoError(t, err)
 

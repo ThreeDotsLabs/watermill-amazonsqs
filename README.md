@@ -16,8 +16,7 @@ You can run the unit tests by simply running  the command: `go test -cover -race
 
 #### Development and Testing
 
-To try the  in test mode (using [goaws](https://github.com/p4tin/goaws))
+To try the  in test mode (using [localstack](https://hub.docker.com/r/localstack/localstack))
 - start docker using: `docker-compose up -d`
-- export AWS_ENDPOINT=http://localhost:4100/
 
 Now you can run the application: `go run cmd/main.go`

@@ -113,6 +113,6 @@ func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.
 func GetAWSConfig() (aws.Config, error) {
 	return awsconfig.LoadDefaultConfig(
 		context.Background(),
-		connection.SetEndPoint("http://localhost:4100"),
+		connection.SetEndPoint("http://localhost:4566"),
 	)
 }

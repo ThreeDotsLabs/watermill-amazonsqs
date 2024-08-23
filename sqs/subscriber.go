@@ -59,19 +59,11 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 
 	queueURL, err := getQueueUrl(ctx, s.sqs, topic, s.config.GenerateGetQueueUrlInput)
 	if err != nil {
-		// todo: should be logged later
-		// todo: better err handling
-		s.logger.With(watermill.LogFields{
-			"queue": queueURL,
-			"topic": topic,
-		}).Error("Failed to get queue", err, nil)
-
 		close(output)
 		cancel()
-		return nil, err
+		return nil, fmt.Errorf("cannot get queue for topic %s: %w", topic, err)
 	}
 	if queueURL == nil {
-		s.logger.With(watermill.LogFields{"topic": topic}).Trace("Queue not found", nil)
 		close(output)
 		cancel()
 		return nil, fmt.Errorf("queue %s not found", topic)
@@ -84,7 +76,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
 
-	s.logger.With(watermill.LogFields{"queue": queueURL}).Trace("Subscribing to queue", nil)
+	s.logger.With(watermill.LogFields{"queue": queueURL}).Debug("Subscribing to queue", nil)
 
 	s.subscribersWg.Add(1)
 
@@ -106,6 +98,11 @@ func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *
 		"queue":    queueURL,
 	}
 
+	go func() {
+		<-s.closing
+		cancelCtx()
+	}()
+
 	var sleepTime time.Duration = 0
 	for {
 		select {
@@ -117,16 +114,20 @@ func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *
 			s.logger.Trace("Stopping consume, context canceled", logFields)
 			return
 
-		case <-time.After(sleepTime): // Wait if needed
-			s.logger.Trace("Timeout?", logFields)
+		case <-time.After(sleepTime):
+			// Wait if needed
 		}
 
 		result, err := s.sqs.ReceiveMessage(ctx, input)
-
 		if err != nil {
-			s.logger.Error("Cannot connect receive messages", err, logFields)
-			sleepTime = s.config.ReconnectRetrySleep
-			continue
+			if errors.Is(err, context.Canceled) {
+				sleepTime = NoSleep
+				continue
+			} else {
+				s.logger.Error("Cannot connect receive messages", err, logFields)
+				sleepTime = s.config.ReconnectRetrySleep
+				continue
+			}
 		}
 
 		sleepTime = NoSleep
@@ -145,58 +146,69 @@ func (s *Subscriber) ConsumeMessages(
 	output chan *message.Message,
 	logFields watermill.LogFields,
 ) {
-	s.logger.Trace("ConsumeMessages", logFields)
-
 	for _, sqsMsg := range messages {
-		s.logger.Trace("ConsumeMessages", logFields)
+		processed := s.processMessage(ctx, logFields, sqsMsg, output, queueURL)
 
-		ctx, cancelCtx := context.WithCancel(ctx)
-		defer cancelCtx() // todo: leak
-		msg, err := s.config.Unmarshaler.Unmarshal(&sqsMsg)
-		if err != nil {
-			s.logger.Error("Cannot unmarshal message", err, logFields)
-			return
-		}
-		msg.SetContext(ctx)
-		output <- msg
-
-		select {
-		case <-msg.Acked():
-			err := s.deleteMessage(ctx, queueURL, sqsMsg.ReceiptHandle)
-			if err != nil {
-				s.logger.Error("Failed to delete message", err, logFields)
-				return
-			}
-		case <-msg.Nacked():
-			// Do not delete message, it will be redelivered
-		case <-s.closing:
-			s.logger.Trace("Closing, message discarded before ack", logFields)
-			return
-		case <-ctx.Done():
-			s.logger.Trace("Closing, ctx cancelled before ack", logFields)
+		if !processed {
 			return
 		}
 	}
 }
 
-func (s *Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptHandle *string) error {
+func (s *Subscriber) processMessage(ctx context.Context, logFields watermill.LogFields, sqsMsg types.Message, output chan *message.Message, queueURL string) bool {
+	s.logger.Trace("processMessage", logFields)
+
+	ctx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+
+	msg, err := s.config.Unmarshaler.Unmarshal(&sqsMsg)
+	if err != nil {
+		s.logger.Error("Cannot unmarshal message", err, logFields)
+		return false
+	}
+	msg.SetContext(ctx)
+	output <- msg
+
+	select {
+	case <-msg.Acked():
+		err := s.deleteMessage(ctx, queueURL, sqsMsg.ReceiptHandle, logFields)
+		if errors.Is(err, context.Canceled) {
+			return false
+		}
+		if err != nil {
+			s.logger.Error("Failed to delete message", err, logFields)
+			return false
+		}
+	case <-msg.Nacked():
+		// Do not delete message, it will be redelivered
+		return false // we don't want to process next messages to preserve order
+	case <-s.closing:
+		s.logger.Trace("Closing, message discarded before ack", logFields)
+		return false
+	case <-ctx.Done():
+		s.logger.Trace("Closing, ctx cancelled before ack", logFields)
+		return false
+	}
+
+	return true
+}
+
+func (s *Subscriber) deleteMessage(ctx context.Context, queueURL string, receiptHandle *string, logFields watermill.LogFields) error {
 	input, err := s.config.GenerateDeleteMessageInput(ctx, queueURL, receiptHandle)
 	if err != nil {
 		return fmt.Errorf("cannot generate input for delete message: %w", err)
 	}
 
 	_, err = s.sqs.DeleteMessage(ctx, input)
-
 	if err != nil {
 		var oe *smithy.GenericAPIError
 		if errors.As(err, &oe) {
 			if oe.Message == "The specified queue does not contain the message specified." {
-				// Message was already deleted or is not in queue
-				// todo: log?
+				s.logger.Trace("Message was already deleted or is not in queue", logFields)
 				return nil
 			}
 		}
-		return err
+		return fmt.Errorf("cannot ack (delete) message: %w", err)
 	}
 
 	return nil
