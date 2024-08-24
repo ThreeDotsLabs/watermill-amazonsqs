@@ -52,12 +52,17 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		return nil, errors.New("subscriber closed")
 	}
 
-	s.logger.With(watermill.LogFields{"topic": topic}).Trace("Getting queue", nil)
+	s.logger.With(watermill.LogFields{"topic": topic}).Debug("Getting queue", nil)
+
+	getQueueInput, err := s.config.GenerateGetQueueUrlInput(ctx, topic)
+	if err != nil {
+		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	output := make(chan *message.Message)
 
-	queueURL, err := getQueueUrl(ctx, s.sqs, topic, s.config.GenerateGetQueueUrlInput)
+	queueURL, err := getQueueUrl(ctx, s.sqs, topic, getQueueInput)
 	if err != nil {
 		close(output)
 		cancel()
@@ -66,17 +71,17 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 	if queueURL == nil {
 		close(output)
 		cancel()
-		return nil, fmt.Errorf("queue %s not found", topic)
+		return nil, fmt.Errorf("queue for topic %s not found", topic)
 	}
 
 	receiveInput, err := s.config.GenerateReceiveMessageInput(ctx, *queueURL)
 	if err != nil {
 		close(output)
 		cancel()
-		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+		return nil, fmt.Errorf("cannot generate input for topic %s: %w", topic, err)
 	}
 
-	s.logger.With(watermill.LogFields{"queue": queueURL}).Debug("Subscribing to queue", nil)
+	s.logger.With(watermill.LogFields{"queue": *queueURL}).Info("Subscribing to queue", nil)
 
 	s.subscribersWg.Add(1)
 
@@ -107,11 +112,11 @@ func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *
 	for {
 		select {
 		case <-s.closing:
-			s.logger.Trace("Discarding queued message, subscriber closing", logFields)
+			s.logger.Debug("Discarding queued message, subscriber closing", logFields)
 			return
 
 		case <-ctx.Done():
-			s.logger.Trace("Stopping consume, context canceled", logFields)
+			s.logger.Debug("Stopping consume, context canceled", logFields)
 			return
 
 		case <-time.After(sleepTime):
@@ -183,10 +188,10 @@ func (s *Subscriber) processMessage(ctx context.Context, logFields watermill.Log
 		// Do not delete message, it will be redelivered
 		return false // we don't want to process next messages to preserve order
 	case <-s.closing:
-		s.logger.Trace("Closing, message discarded before ack", logFields)
+		s.logger.Debug("Closing, message discarded before ack", logFields)
 		return false
 	case <-ctx.Done():
-		s.logger.Trace("Closing, ctx cancelled before ack", logFields)
+		s.logger.Debug("Closing, ctx cancelled before ack", logFields)
 		return false
 	}
 
@@ -199,12 +204,21 @@ func (s *Subscriber) deleteMessage(ctx context.Context, queueURL string, receipt
 		return fmt.Errorf("cannot generate input for delete message: %w", err)
 	}
 
+	// we are using ctx that may be canceled when subscriber is closed
+	//
+	// it may lead to re-delivery when message is processed and in the meantime
+	// subscriber is closed - but we don't know if context cancellation didn't cancel
+	// some SQL transactions or whatever - so someone may lose data
+	//
+	// in other words, we prefer re-delivery (as at least once delivery is a thing anyway)
 	_, err = s.sqs.DeleteMessage(ctx, input)
 	if err != nil {
 		var oe *smithy.GenericAPIError
 		if errors.As(err, &oe) {
+			// todo(roblaszczak): it would be nice to replace it with a specific error type
+			// but I wasn't able to reproduce it
 			if oe.Message == "The specified queue does not contain the message specified." {
-				s.logger.Trace("Message was already deleted or is not in queue", logFields)
+				s.logger.Debug("Message was already deleted or is not in queue", logFields)
 				return nil
 			}
 		}
@@ -237,7 +251,7 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 		return fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
 
-	_, err = greateQueue(ctx, s.sqs, input)
+	_, err = createQueue(ctx, s.sqs, input)
 	if err != nil {
 		return fmt.Errorf("cannot create queue %s: %w", topic, err)
 	}
@@ -246,8 +260,12 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 }
 
 func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
-	queueUrl, err := getQueueUrl(ctx, s.sqs, topic, s.config.GenerateGetQueueUrlInput)
-	return queueUrl, err
+	getQueueInput, err := s.config.GenerateGetQueueUrlInput(ctx, topic)
+	if err != nil {
+		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	}
+
+	return getQueueUrl(ctx, s.sqs, topic, getQueueInput)
 }
 
 func (s *Subscriber) GetQueueArn(ctx context.Context, url *string) (*string, error) {

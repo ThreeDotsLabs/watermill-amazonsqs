@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/pkg/errors"
 )
 
 type QueueConfigAttributes struct {
@@ -54,12 +55,7 @@ func (q QueueConfigAttributes) Attributes() (map[string]string, error) {
 	return m, nil
 }
 
-func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, generateGetQueueUrlInput GenerateGetQueueUrlInputFunc) (*string, error) {
-	input, err := generateGetQueueUrlInput(ctx, topic)
-	if err != nil {
-		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
-	}
-
+func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input *sqs.GetQueueUrlInput) (*string, error) {
 	getQueueOutput, err := sqsClient.GetQueueUrl(ctx, input)
 
 	if err != nil || getQueueOutput.QueueUrl == nil {
@@ -68,8 +64,20 @@ func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, gener
 	return getQueueOutput.QueueUrl, nil
 }
 
-func greateQueue(ctx context.Context, sqsClient *sqs.Client, createQueueParams *sqs.CreateQueueInput) (*string, error) {
+func createQueue(
+	ctx context.Context,
+	sqsClient *sqs.Client,
+	createQueueParams *sqs.CreateQueueInput,
+) (*string, error) {
 	createQueueOutput, err := sqsClient.CreateQueue(ctx, createQueueParams)
+	// possible scenarios:
+	// 1. queue already exists, but with different params
+	//(for example: "A queue already exists with the same name and a different value for attribute VisibilityTimeout")
+	// 2. queue was created in the meantime
+	var queueExistsErrr *types.QueueNameExists
+	if errors.As(err, &queueExistsErrr) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot create queue %w", err)
 	}

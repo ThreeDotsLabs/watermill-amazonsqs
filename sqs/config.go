@@ -74,6 +74,7 @@ type PublisherConfig struct {
 	AWSConfig aws.Config
 
 	CreateQueueConfig      QueueConfigAttributes
+	DoNotCacheQueues       bool
 	CreateQueueIfNotExists bool
 
 	GenerateGetQueueUrlInput GenerateGetQueueUrlInputFunc
@@ -132,6 +133,7 @@ func GenerateReceiveMessageInputDefault(ctx context.Context, queueURL string) (*
 		QueueUrl:              aws.String(queueURL),
 		MessageAttributeNames: []string{"All"},
 		WaitTimeSeconds:       20, // 20 is max at the moment
+		MaxNumberOfMessages:   1,  // Currently default value.
 	}, nil
 }
 
