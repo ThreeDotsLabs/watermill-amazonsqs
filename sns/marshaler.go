@@ -8,18 +8,20 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
+// todo: check if it can be renamed
 const UUIDAttribute = "UUID"
 
 type Marshaler interface {
-	Marshal(msg *message.Message) *sns.PublishInput
+	Marshal(topicArn string, msg *message.Message) *sns.PublishInput
 }
 
 type DefaultMarshalerUnmarshaler struct{}
 
-func (d DefaultMarshalerUnmarshaler) Marshal(msg *message.Message) *sns.PublishInput {
+func (d DefaultMarshalerUnmarshaler) Marshal(topicArn string, msg *message.Message) *sns.PublishInput {
 	// client side uuid
 	// there is a deduplication id that can be use for
 	// fifo queues
+	// todo: check how it works
 	attributes, deduplicationId, groupId := metadataToAttributes(msg.Metadata)
 	attributes[UUIDAttribute] = types.MessageAttributeValue{
 		StringValue: aws.String(msg.UUID),
@@ -31,6 +33,7 @@ func (d DefaultMarshalerUnmarshaler) Marshal(msg *message.Message) *sns.PublishI
 		MessageAttributes:      attributes,
 		MessageDeduplicationId: deduplicationId,
 		MessageGroupId:         groupId,
+		TargetArn:              &topicArn,
 	}
 }
 

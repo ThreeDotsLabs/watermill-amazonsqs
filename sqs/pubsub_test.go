@@ -24,7 +24,7 @@ func TestPubSub(t *testing.T) {
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false,
+			GuaranteedOrder:     false, // todo?
 			Persistent:          true,
 		},
 		createPubSub,
@@ -40,7 +40,7 @@ func TestPubSub_stress(t *testing.T) {
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false,
+			GuaranteedOrder:     false, // todo?
 			Persistent:          true,
 		},
 		createPubSub,
@@ -69,7 +69,7 @@ func TestPublishSubscribe_batching(t *testing.T) {
 			pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 				AWSConfig: cfg,
 				CreateQueueConfig: sqs.QueueConfigAttributes{
-					// Defalt value is 30 seconds - need to be lower for tests
+					// Default value is 30 seconds - need to be lower for tests
 					VisibilityTimeout: "1",
 				},
 				CreateQueueIfNotExists: true,
@@ -79,8 +79,8 @@ func TestPublishSubscribe_batching(t *testing.T) {
 
 			sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 				AWSConfig: cfg,
-				CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
-					// Defalt value is 30 seconds - need to be lower for tests
+				QueueConfigAttributes: sqs.QueueConfigAttributes{
+					// Default value is 30 seconds - need to be lower for tests
 					VisibilityTimeout: "1",
 				},
 				GenerateReceiveMessageInput: func(ctx context.Context, queueURL string) (*awssqs.ReceiveMessageInput, error) {
@@ -108,8 +108,8 @@ func TestPublishSubscribe_creating_queue_with_different_settings_should_be_idemp
 
 	sub1, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: newAwsConfig(t),
-		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
-			// Defalt value is 30 seconds - need to be lower for tests
+		QueueConfigAttributes: sqs.QueueConfigAttributes{
+			// Default value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
 		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
@@ -118,8 +118,8 @@ func TestPublishSubscribe_creating_queue_with_different_settings_should_be_idemp
 
 	sub2, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: newAwsConfig(t),
-		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
-			// Defalt value is 30 seconds - need to be lower for tests
+		QueueConfigAttributes: sqs.QueueConfigAttributes{
+			// Default value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "20",
 		},
 		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
@@ -162,7 +162,7 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig: cfg,
 		CreateQueueConfig: sqs.QueueConfigAttributes{
-			// Defalt value is 30 seconds - need to be lower for tests
+			// Default value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
 		CreateQueueIfNotExists: true,
@@ -172,8 +172,8 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 
 	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: cfg,
-		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
-			// Defalt value is 30 seconds - need to be lower for tests
+		QueueConfigAttributes: sqs.QueueConfigAttributes{
+			// Default value is 30 seconds - need to be lower for tests
 			VisibilityTimeout: "1",
 		},
 		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},

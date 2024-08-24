@@ -2,46 +2,34 @@ package sns
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 )
 
-type SNSConfigAtrributes struct {
-	DeliveryPolicy            string `json:"DeliveryPolicy,omitempty"`
-	DisplayName               string `json:"DisplayName,omitempty"`
-	Policy                    string `json:"Policy,omitempty"`
-	SignatureVersion          string `json:"SignatureVersion,omitempty"`
-	TracingConfig             string `json:"TracingConfig,omitempty"`
-	KmsMasterKeyId            string `json:"KmsMasterKeyId,omitempty"`
-	FifoTopic                 string `json:"FifoTopic,omitempty"`
-	ContentBasedDeduplication string `json:"ContentBasedDeduplication,omitempty"`
-}
-
-func (s SNSConfigAtrributes) Attributes() map[string]string {
-	b, _ := json.Marshal(s)
-	var m map[string]string
-	_ = json.Unmarshal(b, &m)
-	return m
-}
-
-func CreateSNS(ctx context.Context, snsClient *sns.Client, topicARN string, createSNSParams sns.CreateTopicInput) (*string, error) {
-	createSNSParams.Name = aws.String(topicARN)
+func createSnsTopic(ctx context.Context, snsClient *sns.Client, createSNSParams sns.CreateTopicInput) (*string, error) {
 	createSNSOutput, err := snsClient.CreateTopic(ctx, &createSNSParams)
 	if err != nil || createSNSOutput.TopicArn == nil {
-		return nil, fmt.Errorf("cannot create SNS %s: %w", topicARN, err)
+		return nil, fmt.Errorf("cannot create SNS topic %s: %w", *createSNSParams.Name, err)
 	}
 	return createSNSOutput.TopicArn, nil
 }
 
-func CheckARNTopic(ctx context.Context, snsClient *sns.Client, topicARN string) (*string, error) {
-	createSNSOutput, err := snsClient.GetTopicAttributes(ctx, &sns.GetTopicAttributesInput{
-		TopicArn: aws.String(topicARN),
-	})
-	if err != nil || createSNSOutput == nil {
-		return nil, fmt.Errorf("cannot create SNS %s: %w", topicARN, err)
+func GenerateTopicArn(region, accountID, topic string) (string, error) {
+	var err error
+	if region == "" {
+		err = errors.Join(err, fmt.Errorf("region is empty"))
 	}
-	return &topicARN, nil
+	if accountID == "" {
+		err = errors.Join(err, fmt.Errorf("accountID is empty"))
+	}
+	if topic == "" {
+		err = errors.Join(err, fmt.Errorf("topic is empty"))
+	}
+	if err != nil {
+		return "", fmt.Errorf("can't generate topic arn: %w", err)
+	}
+
+	return fmt.Sprintf("arn:aws:sns:%s:%s:%s", region, accountID, topic), nil
 }

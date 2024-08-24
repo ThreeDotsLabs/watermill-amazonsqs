@@ -4,69 +4,25 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	snsaws "github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
 )
-
-type TestSNS struct {
-	sns.Publisher
-	sub *sqs.Subscriber
-}
-
-func (t *TestSNS) Publish(topic string, messages ...*message.Message) error {
-	ctx := context.Background()
-	pubArn, err := t.Publisher.GetArnTopic(ctx, topic)
-	if err != nil {
-		return err
-	}
-	sqsUrl, err := t.sub.GetQueueUrl(ctx, topic)
-	if err != nil {
-		return err
-	}
-
-	err = t.Publisher.AddSubscription(context.Background(), &snsaws.SubscribeInput{
-		Protocol: aws.String("sqs"),
-		TopicArn: pubArn,
-		Endpoint: sqsUrl,
-		Attributes: map[string]string{
-			"RawMessageDelivery": "true",
-		},
-	})
-	if err != nil {
-		return err
-	}
-	err = t.Publisher.Publish(topic, messages...)
-	return err
-}
-
-func TestCreatePub(t *testing.T) {
-	logger := watermill.NewStdLogger(true, true)
-
-	cfg, err := GetAWSConfig()
-	require.NoError(t, err)
-
-	_, err = sns.NewPublisher(sns.PublisherConfig{
-		AWSConfig: cfg,
-	}, logger)
-
-	require.NoError(t, err)
-}
 
 func TestPublishSubscribe(t *testing.T) {
 	tests.TestPubSub(
 		t,
 		tests.Features{
-			ConsumerGroups:      false,
+			ConsumerGroups:      true,
 			ExactlyOnceDelivery: false,
 			GuaranteedOrder:     false,
 			Persistent:          true,
@@ -76,43 +32,107 @@ func TestPublishSubscribe(t *testing.T) {
 	)
 }
 
+func TestPublisher_CreateTopic_is_idempotent(t *testing.T) {
+	pub, _ := createPubSub(t)
+
+	topicName := watermill.NewUUID()
+
+	arn1, err := pub.(*sns.Publisher).CreateTopic(context.Background(), topicName)
+	require.NoError(t, err)
+
+	arn2, err := pub.(*sns.Publisher).CreateTopic(context.Background(), topicName)
+	require.NoError(t, err)
+
+	assert.Equal(t, arn1, arn2)
+}
+
+func TestSubscriber_SubscribeInitialize_is_idempotent(t *testing.T) {
+	_, sub := createPubSub(t)
+
+	topicName := watermill.NewUUID()
+
+	err := sub.(*sns.Subscriber).SubscribeInitialize(topicName)
+	require.NoError(t, err)
+
+	err = sub.(*sns.Subscriber).SubscribeInitialize(topicName)
+	require.NoError(t, err)
+}
+
 func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
-	logger := watermill.NewStdLogger(false, false)
+	logger := watermill.NewStdLogger(true, true)
 	cfg, err := GetAWSConfig()
 	require.NoError(t, err)
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
+		AwsAccountID:      "000000000000",
 		AWSConfig:         cfg,
-		CreateTopicConfig: sns.SNSConfigAtrributes{
+		CreateTopicConfig: sns.ConfigAttributes{
 			// FifoTopic: "true",
 		},
-		CreateTopicfNotExists: true,
-		Marshaler:             sns.DefaultMarshalerUnmarshaler{},
+		Marshaler: sns.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	require.NoError(t, err)
 
-	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
-		AWSConfig: cfg,
-		CreateQueueInitializerConfig: sqs.QueueConfigAttributes{
-			// Defalt value is 30 seconds - need to be lower for tests
-			VisibilityTimeout: "15",
+	sub, err := sns.NewSubscriber(
+		sns.SubscriberConfig{
+			AWSConfig:    cfg,
+			AwsAccountID: "000000000000",
 		},
-		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
-	}, logger)
+		sqs.SubscriberConfig{
+			AWSConfig: cfg,
+			QueueConfigAttributes: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+		},
+		logger,
+	)
 	require.NoError(t, err)
-	test := &TestSNS{
-		Publisher: *pub,
-		sub:       sub,
-	}
-	return test, sub
+
+	return pub, sub
 }
 
 func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.Publisher, message.Subscriber) {
-	return createPubSub(t)
+	logger := watermill.NewStdLogger(true, false)
+	cfg, err := GetAWSConfig()
+	require.NoError(t, err)
+
+	pub, err := sns.NewPublisher(sns.PublisherConfig{
+		AwsAccountID:      "000000000000",
+		AWSConfig:         cfg,
+		CreateTopicConfig: sns.ConfigAttributes{
+			// FifoTopic: "true",
+		},
+		Marshaler: sns.DefaultMarshalerUnmarshaler{},
+	}, logger)
+	require.NoError(t, err)
+
+	sub, err := sns.NewSubscriber(
+		sns.SubscriberConfig{
+			AWSConfig:    cfg,
+			AwsAccountID: "000000000000",
+			GenerateSqsQueueName: func(ctx context.Context, sqsTopic string) (string, error) {
+				return consumerGroup, nil
+			},
+		},
+		sqs.SubscriberConfig{
+			AWSConfig: cfg,
+			QueueConfigAttributes: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+		},
+		logger,
+	)
+	require.NoError(t, err)
+
+	return pub, sub
 }
+
 func GetAWSConfig() (aws.Config, error) {
 	return awsconfig.LoadDefaultConfig(
 		context.Background(),
 		connection.SetEndPoint("http://localhost:4566"),
+		awsconfig.WithRegion("us-west-2"),
 	)
 }

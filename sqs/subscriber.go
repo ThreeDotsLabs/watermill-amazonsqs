@@ -140,11 +140,11 @@ func (s *Subscriber) receive(ctx context.Context, queueURL string, output chan *
 			s.logger.Trace("No messages", logFields)
 			continue
 		}
-		s.ConsumeMessages(ctx, result.Messages, queueURL, output, logFields)
+		s.consumeMessages(ctx, result.Messages, queueURL, output, logFields)
 	}
 }
 
-func (s *Subscriber) ConsumeMessages(
+func (s *Subscriber) consumeMessages(
 	ctx context.Context,
 	messages []types.Message,
 	queueURL string,
@@ -160,18 +160,30 @@ func (s *Subscriber) ConsumeMessages(
 	}
 }
 
-func (s *Subscriber) processMessage(ctx context.Context, logFields watermill.LogFields, sqsMsg types.Message, output chan *message.Message, queueURL string) bool {
-	s.logger.Trace("processMessage", logFields)
+func (s *Subscriber) processMessage(
+	ctx context.Context,
+	logFields watermill.LogFields,
+	sqsMsg types.Message,
+	output chan *message.Message,
+	queueURL string,
+) bool {
+	logger := s.logger.With(logFields)
+	logger.Trace("processMessage", nil)
 
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
 	msg, err := s.config.Unmarshaler.Unmarshal(&sqsMsg)
 	if err != nil {
-		s.logger.Error("Cannot unmarshal message", err, logFields)
+		logger.Error("Cannot unmarshal message", err, logFields)
 		return false
 	}
 	msg.SetContext(ctx)
+
+	logger = s.logger.With(logFields).With(watermill.LogFields{
+		"message_uuid": msg.UUID,
+	})
+
 	output <- msg
 
 	select {
@@ -181,17 +193,18 @@ func (s *Subscriber) processMessage(ctx context.Context, logFields watermill.Log
 			return false
 		}
 		if err != nil {
-			s.logger.Error("Failed to delete message", err, logFields)
+			logger.Error("Failed to delete message", err, logFields)
 			return false
 		}
 	case <-msg.Nacked():
 		// Do not delete message, it will be redelivered
-		return false // we don't want to process next messages to preserve order
+		logger.Debug("Nacking message", logFields)
+		return false // we don't want to process next messages to preserve order for FIFO
 	case <-s.closing:
-		s.logger.Debug("Closing, message discarded before ack", logFields)
+		logger.Debug("Closing, message discarded before ack", logFields)
 		return false
 	case <-ctx.Done():
-		s.logger.Debug("Closing, ctx cancelled before ack", logFields)
+		logger.Debug("Closing, ctx cancelled before ack", logFields)
 		return false
 	}
 
@@ -246,7 +259,7 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 }
 
 func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
-	input, err := s.config.GenerateCreateQueueInput(ctx, topic, s.config.CreateQueueInitializerConfig)
+	input, err := s.config.GenerateCreateQueueInput(ctx, topic, s.config.QueueConfigAttributes)
 	if err != nil {
 		return fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}

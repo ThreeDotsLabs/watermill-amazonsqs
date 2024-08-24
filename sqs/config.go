@@ -18,8 +18,8 @@ type SubscriberConfig struct {
 	// ReconnectRetrySleep is the time to sleep between reconnect attempts.
 	ReconnectRetrySleep time.Duration
 
-	// CreateQueueInitializerConfig is a struct that holds the attributes of an SQS queue.
-	CreateQueueInitializerConfig QueueConfigAttributes
+	// QueueConfigAttributes is a struct that holds the attributes of an SQS queue.
+	QueueConfigAttributes QueueConfigAttributes
 
 	// GenerateCreateQueueInput generates *sqs.CreateQueueInput for AWS SDK.
 	GenerateCreateQueueInput GenerateCreateQueueInputFunc
@@ -211,7 +211,7 @@ type QueueConfigAttributes struct {
 
 	// VisibilityTimeout – The visibility timeout for the queue, in seconds.
 	// Valid values: An integer from 0 to 43,200 (12 hours). Default: 30.
-
+	//
 	// For more information about the visibility timeout, see
 	// [Visibility Timeout](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html) in the Amazon SQS Developer Guide.
 	VisibilityTimeout string `json:"VisibilityTimeout,omitempty"`
