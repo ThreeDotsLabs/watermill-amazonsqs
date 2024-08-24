@@ -38,3 +38,24 @@ func TestQueueConfigAttributes_Attributes(t *testing.T) {
 		attrs,
 	)
 }
+
+func TestQueueConfigAttributes_Attributes_custom_attributes(t *testing.T) {
+	structAttrs := sqs.QueueConfigAttributes{
+		DelaySeconds: "10",
+		CustomAttributes: map[string]string{
+			"test": "test",
+		},
+	}
+
+	attrs, err := structAttrs.Attributes()
+	require.NoError(t, err)
+
+	require.Equal(
+		t,
+		map[string]string{
+			"DelaySeconds": "10",
+			"test":         "test",
+		},
+		attrs,
+	)
+}
