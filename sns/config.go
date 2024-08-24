@@ -11,9 +11,7 @@ import (
 )
 
 type PublisherConfig struct {
-	// todo: add func for that?
-	AwsAccountID string
-	AWSConfig    aws.Config
+	AWSConfig aws.Config
 
 	CreateTopicConfig           ConfigAttributes
 	DoNotCreateTopicIfNotExists bool
@@ -49,9 +47,6 @@ func (c *PublisherConfig) setDefaults() {
 func (c *PublisherConfig) Validate() error {
 	var err error
 
-	if c.AwsAccountID == "" {
-		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AwsAccountID is missing"))
-	}
 	if c.AWSConfig.Credentials == nil {
 		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AWSConfig.Credentials is nil"))
 	}
@@ -60,10 +55,9 @@ func (c *PublisherConfig) Validate() error {
 }
 
 type SubscriberConfig struct {
-	AwsAccountID string
-	AWSConfig    aws.Config
+	AWSConfig aws.Config
 
-	GenerateSqsQueueName func(ctx context.Context, sqsTopic string) (string, error)
+	GenerateSqsQueueName func(ctx context.Context, sqsTopicArn string) (string, error)
 
 	GenerateSubscribeInput GenerateSubscribeInputFn
 
@@ -71,24 +65,28 @@ type SubscriberConfig struct {
 }
 
 func (c *SubscriberConfig) SetDefaults() {
-	if c.GenerateSqsQueueName == nil {
-		c.GenerateSqsQueueName = func(ctx context.Context, sqsTopic string) (string, error) {
-			return sqsTopic, nil
-		}
-	}
 	if c.GenerateSubscribeInput == nil {
 		c.GenerateSubscribeInput = GenerateSubscribeInputDefault
 	}
 }
 
+func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, sqsTopicArn string) (string, error) {
+	topicName, err := TopicNameFromTopicArn(sqsTopicArn)
+	if err != nil {
+		return "", err
+	}
+
+	return topicName, nil
+}
+
 func (c *SubscriberConfig) Validate() error {
 	var err error
 
-	if c.AwsAccountID == "" {
-		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.AwsAccountID is missing"))
-	}
 	if c.AWSConfig.Credentials == nil {
 		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.AWSConfig.Credentials is nil"))
+	}
+	if c.GenerateSqsQueueName == nil {
+		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.GenerateSqsQueueName is nil"))
 	}
 
 	return err
@@ -97,7 +95,6 @@ func (c *SubscriberConfig) Validate() error {
 type GenerateSubscribeInputFn func(ctx context.Context, params GenerateSubscribeInputParams) (*sns.SubscribeInput, error)
 
 type GenerateSubscribeInputParams struct {
-	SnsTopic string
 	SqsTopic string
 
 	SnsTopicArn string

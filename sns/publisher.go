@@ -31,13 +31,8 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 	}, nil
 }
 
-func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
+func (p *Publisher) Publish(topicArn string, messages ...*message.Message) error {
 	ctx := context.Background()
-
-	topicArn, err := GenerateTopicArn(p.config.AWSConfig.Region, p.config.AwsAccountID, topic)
-	if err != nil {
-		return err
-	}
 
 	for _, msg := range messages {
 		p.logger.Debug("Sending message", watermill.LogFields{
@@ -55,7 +50,7 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 			// in most cases topic will already exist - as form of optimisation we
 			// assume that topic exists to avoid unnecessary API calls
 			// we create topic only if it doesn't exist
-			if _, err := p.CreateTopic(ctx, topic); err != nil {
+			if _, err := p.CreateTopic(ctx, topicArn); err != nil {
 				return fmt.Errorf("failed to create topic: %w", err)
 			}
 
@@ -63,22 +58,22 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 			_, err = p.sns.Publish(ctx, input)
 		}
 		if err != nil {
-			return fmt.Errorf("cannot publish message to topic %s [%s]: %w", topic, topicArn, err)
+			return fmt.Errorf("cannot publish message to topic %s: %w", topicArn, err)
 		}
 	}
 
 	return nil
 }
 
-func (p *Publisher) CreateTopic(ctx context.Context, topic string) (string, error) {
-	topicArn, err := GenerateTopicArn(p.config.AWSConfig.Region, p.config.AwsAccountID, topic)
+func (p *Publisher) CreateTopic(ctx context.Context, topicArn string) (string, error) {
+	topicName, err := TopicNameFromTopicArn(topicArn)
 	if err != nil {
 		return "", err
 	}
 
-	input, err := p.config.GenerateCreateTopicInput(ctx, topic, p.config.CreateTopicConfig)
+	input, err := p.config.GenerateCreateTopicInput(ctx, topicName, p.config.CreateTopicConfig)
 	if err != nil {
-		return "", fmt.Errorf("cannot generate create topic input for %s: %w", topic, err)
+		return "", fmt.Errorf("cannot generate create topic input for %s: %w", topicName, err)
 	}
 
 	createdTopicArn, err := createSnsTopic(ctx, p.sns, input)

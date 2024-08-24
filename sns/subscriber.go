@@ -49,14 +49,14 @@ func NewSubscriber(
 	}, nil
 }
 
-func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+func (s *Subscriber) Subscribe(ctx context.Context, snsTopicArn string) (<-chan *message.Message, error) {
 	if !s.config.DoNotSubscribeToSns {
-		if err := s.SubscribeInitializeWithContext(ctx, topic); err != nil {
+		if err := s.SubscribeInitializeWithContext(ctx, snsTopicArn); err != nil {
 			return nil, err
 		}
 	}
 
-	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, topic)
+	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, snsTopicArn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate SQS queue name: %w", err)
 	}
@@ -68,32 +68,26 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 	return s.SubscribeInitializeWithContext(context.Background(), topic)
 }
 
-func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, snsTopic string) error {
-	snsTopicArn, err := GenerateTopicArn(s.config.AWSConfig.Region, s.config.AwsAccountID, snsTopic)
-	if err != nil {
-		return err
-	}
-
-	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, snsTopic)
+func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, snsTopicArn string) error {
+	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, snsTopicArn)
 	if err != nil {
 		return fmt.Errorf("failed to generate SQS queue name: %w", err)
 	}
 
 	if err := s.sqs.SubscribeInitializeWithContext(ctx, sqsTopic); err != nil {
-		return fmt.Errorf("cannot initialize SQS subscription for topic %s: %w", snsTopic, err)
+		return fmt.Errorf("cannot initialize SQS subscription for topic %s: %w", snsTopicArn, err)
 	}
 
 	sqsURL, err := s.sqs.GetQueueUrl(ctx, sqsTopic)
 	if err != nil {
-		return fmt.Errorf("cannot get queue url for topic %s: %w", snsTopic, err)
+		return fmt.Errorf("cannot get queue url for topic %s: %w", snsTopicArn, err)
 	}
 	sqsQueueArn, err := s.sqs.GetQueueArn(ctx, sqsURL)
 	if err != nil {
-		return fmt.Errorf("cannot get queue ARN for topic %s: %w", snsTopic, err)
+		return fmt.Errorf("cannot get queue ARN for topic %s: %w", snsTopicArn, err)
 	}
 
 	s.logger.Info("Subscribing to SNS", watermill.LogFields{
-		"sns_topic":     snsTopic,
 		"sns_topic_arn": snsTopicArn,
 		"sqs_topic":     sqsTopic,
 		"sqs_url":       *sqsURL,
@@ -101,7 +95,6 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, snsTopi
 	})
 
 	input, err := s.config.GenerateSubscribeInput(ctx, GenerateSubscribeInputParams{
-		SnsTopic:    snsTopic,
 		SqsTopic:    sqsTopic,
 		SnsTopicArn: snsTopicArn,
 		SqsQueueArn: *sqsQueueArn,

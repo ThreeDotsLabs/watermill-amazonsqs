@@ -2,6 +2,7 @@ package sns_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
@@ -26,6 +27,9 @@ func TestPublishSubscribe(t *testing.T) {
 			ExactlyOnceDelivery: false,
 			GuaranteedOrder:     false,
 			Persistent:          true,
+			GenerateTopicFunc: func(tctx tests.TestContext) string {
+				return fmt.Sprintf("arn:aws:sns:us-west-2:000000000000:%s", tctx.TestID)
+			},
 		},
 		createPubSub,
 		createPubSubWithConsumerGroup,
@@ -35,7 +39,7 @@ func TestPublishSubscribe(t *testing.T) {
 func TestPublisher_CreateTopic_is_idempotent(t *testing.T) {
 	pub, _ := createPubSub(t)
 
-	topicName := watermill.NewUUID()
+	topicName := "arn:aws:sns:us-west-2:000000000000:" + watermill.NewUUID()
 
 	arn1, err := pub.(*sns.Publisher).CreateTopic(context.Background(), topicName)
 	require.NoError(t, err)
@@ -49,7 +53,7 @@ func TestPublisher_CreateTopic_is_idempotent(t *testing.T) {
 func TestSubscriber_SubscribeInitialize_is_idempotent(t *testing.T) {
 	_, sub := createPubSub(t)
 
-	topicName := watermill.NewUUID()
+	topicName := "arn:aws:sns:us-west-2:000000000000:" + watermill.NewUUID()
 
 	err := sub.(*sns.Subscriber).SubscribeInitialize(topicName)
 	require.NoError(t, err)
@@ -64,7 +68,6 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 	require.NoError(t, err)
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
-		AwsAccountID:      "000000000000",
 		AWSConfig:         cfg,
 		CreateTopicConfig: sns.ConfigAttributes{
 			// FifoTopic: "true",
@@ -75,8 +78,8 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 
 	sub, err := sns.NewSubscriber(
 		sns.SubscriberConfig{
-			AWSConfig:    cfg,
-			AwsAccountID: "000000000000",
+			AWSConfig:            cfg,
+			GenerateSqsQueueName: sns.GenerateSqsQueueNameEqualToTopicName,
 		},
 		sqs.SubscriberConfig{
 			AWSConfig: cfg,
@@ -98,7 +101,6 @@ func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.
 	require.NoError(t, err)
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
-		AwsAccountID:      "000000000000",
 		AWSConfig:         cfg,
 		CreateTopicConfig: sns.ConfigAttributes{
 			// FifoTopic: "true",
@@ -109,8 +111,7 @@ func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.
 
 	sub, err := sns.NewSubscriber(
 		sns.SubscriberConfig{
-			AWSConfig:    cfg,
-			AwsAccountID: "000000000000",
+			AWSConfig: cfg,
 			GenerateSqsQueueName: func(ctx context.Context, sqsTopic string) (string, error) {
 				return consumerGroup, nil
 			},
