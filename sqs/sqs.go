@@ -18,6 +18,7 @@ func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input
 	return getQueueOutput.QueueUrl, nil
 }
 
+// todo: wtf about that?
 func createQueue(
 	ctx context.Context,
 	sqsClient *sqs.Client,
@@ -33,7 +34,7 @@ func createQueue(
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("cannot create queue %w", err)
+		return nil, fmt.Errorf("cannot create queue '%s': %w", *createQueueParams.QueueName, err)
 	}
 	if createQueueOutput.QueueUrl == nil {
 		return nil, fmt.Errorf("cannot create queue, queueUrl is nil")

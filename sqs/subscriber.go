@@ -54,36 +54,49 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 
 	s.logger.With(watermill.LogFields{"topic": topic}).Debug("Getting queue", nil)
 
-	getQueueInput, err := s.config.GenerateGetQueueUrlInput(ctx, topic)
-	if err != nil {
-		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+	resolveQueueParams := ResolveQueueUrlParams{
+		Topic:     topic,
+		SqsClient: s.sqs,
+		Logger:    s.logger,
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	output := make(chan *message.Message)
-
-	queueURL, err := getQueueUrl(ctx, s.sqs, topic, getQueueInput)
+	// todo: what if doesn't exists?
+	queueName, queueURL, exists, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
 	if err != nil {
-		close(output)
-		cancel()
-		return nil, fmt.Errorf("cannot get queue for topic %s: %w", topic, err)
+		return nil, err
 	}
-	if queueURL == nil {
-		close(output)
-		cancel()
-		return nil, fmt.Errorf("queue for topic %s not found", topic)
+	if !exists {
+		if s.config.DoNotCreateQueueIfNotExists {
+			return nil, fmt.Errorf("queue for topic '%s' doesn't exists", topic)
+		}
+
+		input, err := s.config.GenerateCreateQueueInput(ctx, queueName, s.config.QueueConfigAttributes)
+		if err != nil {
+			return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+		}
+
+		_, err = createQueue(ctx, s.sqs, input)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create queue %s: %w", topic, err)
+		}
+
+		// todo: it's quite ugly
+		_, queueURL, _, err = s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	receiveInput, err := s.config.GenerateReceiveMessageInput(ctx, *queueURL)
 	if err != nil {
-		close(output)
-		cancel()
 		return nil, fmt.Errorf("cannot generate input for topic %s: %w", topic, err)
 	}
 
 	s.logger.With(watermill.LogFields{"queue": *queueURL}).Info("Subscribing to queue", nil)
 
+	ctx, cancel := context.WithCancel(ctx)
 	s.subscribersWg.Add(1)
+	output := make(chan *message.Message)
 
 	go func() {
 		s.receive(ctx, *queueURL, output, receiveInput)
@@ -259,7 +272,19 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 }
 
 func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
-	input, err := s.config.GenerateCreateQueueInput(ctx, topic, s.config.QueueConfigAttributes)
+	queueName, _, exists, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
+		Topic:     topic,
+		SqsClient: s.sqs,
+		Logger:    s.logger,
+	})
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	input, err := s.config.GenerateCreateQueueInput(ctx, queueName, s.config.QueueConfigAttributes)
 	if err != nil {
 		return fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
@@ -272,13 +297,21 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	return nil
 }
 
+// todo: duplicated in subscribe?
 func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
-	getQueueInput, err := s.config.GenerateGetQueueUrlInput(ctx, topic)
+	resolveQueueParams := ResolveQueueUrlParams{
+		Topic:     topic,
+		SqsClient: s.sqs,
+		Logger:    s.logger,
+	}
+
+	// todo: what if doesn't exists?
+	_, queueURL, _, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
 
-	return getQueueUrl(ctx, s.sqs, topic, getQueueInput)
+	return queueURL, nil
 }
 
 func (s *Subscriber) GetQueueArn(ctx context.Context, url *string) (*string, error) {

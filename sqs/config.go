@@ -15,6 +15,10 @@ import (
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
+	DoNotCreateQueueIfNotExists bool
+
+	QueueUrlResolver QueueUrlResolver
+
 	// ReconnectRetrySleep is the time to sleep between reconnect attempts.
 	ReconnectRetrySleep time.Duration
 
@@ -23,9 +27,6 @@ type SubscriberConfig struct {
 
 	// GenerateCreateQueueInput generates *sqs.CreateQueueInput for AWS SDK.
 	GenerateCreateQueueInput GenerateCreateQueueInputFunc
-
-	// GenerateGetQueueUrlInput generates *sqs.GetQueueUrlInput for AWS SDK.
-	GenerateGetQueueUrlInput GenerateGetQueueUrlInputFunc
 
 	// GenerateReceiveMessageInput generates *sqs.ReceiveMessageInput for AWS SDK.
 	GenerateReceiveMessageInput GenerateReceiveMessageInputFunc
@@ -49,16 +50,16 @@ func (c *SubscriberConfig) SetDefaults() {
 		c.GenerateCreateQueueInput = GenerateCreateQueueInputDefault
 	}
 
-	if c.GenerateGetQueueUrlInput == nil {
-		c.GenerateGetQueueUrlInput = GenerateGetQueueUrlInputDefault
-	}
-
 	if c.GenerateReceiveMessageInput == nil {
 		c.GenerateReceiveMessageInput = GenerateReceiveMessageInputDefault
 	}
 
 	if c.GenerateDeleteMessageInput == nil {
 		c.GenerateDeleteMessageInput = GenerateDeleteMessageInputDefault
+	}
+
+	if c.QueueUrlResolver == nil {
+		c.QueueUrlResolver = NewGetQueueUrlByNameUrlResolver(GetQueueUrlByNameUrlResolverConfig{})
 	}
 }
 
@@ -72,6 +73,9 @@ func (c SubscriberConfig) Validate() error {
 	if c.Unmarshaler == nil {
 		err = errors.Join(err, errors.New("missing Config.Marshaler"))
 	}
+	if c.QueueUrlResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sqs.SubscriberConfig.QueueUrlResolver is nil"))
+	}
 
 	return err
 }
@@ -79,12 +83,12 @@ func (c SubscriberConfig) Validate() error {
 type PublisherConfig struct {
 	AWSConfig aws.Config
 
-	CreateQueueConfig      QueueConfigAttributes
-	DoNotCacheQueues       bool
-	CreateQueueIfNotExists bool
+	CreateQueueConfig QueueConfigAttributes
+	DoNotCacheQueues  bool
 
-	// GenerateGetQueueUrlInput generates *sqs.GetQueueUrlInput for AWS SDK.
-	GenerateGetQueueUrlInput GenerateGetQueueUrlInputFunc
+	DoNotCreateQueueIfNotExists bool
+
+	QueueUrlResolver QueueUrlResolver
 
 	// GenerateSendMessageInput generates *sqs.SendMessageInput for AWS SDK.
 	GenerateSendMessageInput GenerateSendMessageInputFunc
@@ -100,10 +104,6 @@ func (c *PublisherConfig) setDefaults() {
 		c.Marshaler = DefaultMarshalerUnmarshaler{}
 	}
 
-	if c.GenerateGetQueueUrlInput == nil {
-		c.GenerateGetQueueUrlInput = GenerateGetQueueUrlInputDefault
-	}
-
 	if c.GenerateSendMessageInput == nil {
 		c.GenerateSendMessageInput = GenerateSendMessageInputDefault
 	}
@@ -111,27 +111,33 @@ func (c *PublisherConfig) setDefaults() {
 	if c.GenerateCreateQueueInput == nil {
 		c.GenerateCreateQueueInput = GenerateCreateQueueInputDefault
 	}
+
+	if c.QueueUrlResolver == nil {
+		c.QueueUrlResolver = NewGetQueueUrlByNameUrlResolver(GetQueueUrlByNameUrlResolverConfig{})
+	}
 }
 
-type GenerateCreateQueueInputFunc func(ctx context.Context, topic string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error)
+func (c *PublisherConfig) Validate() error {
+	var err error
 
-func GenerateCreateQueueInputDefault(ctx context.Context, topic string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error) {
+	if c.QueueUrlResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sqs.SubscriberConfig.QueueUrlResolver is nil"))
+	}
+
+	return err
+}
+
+type GenerateCreateQueueInputFunc func(ctx context.Context, queueName string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error)
+
+func GenerateCreateQueueInputDefault(ctx context.Context, queueName string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error) {
 	attrsMap, err := attrs.Attributes()
 	if err != nil {
-		return nil, fmt.Errorf("cannot generate attributes for queue %s: %w", topic, err)
+		return nil, fmt.Errorf("cannot generate attributes for queue %s: %w", queueName, err)
 	}
 
 	return &sqs.CreateQueueInput{
-		QueueName:  aws.String(topic),
+		QueueName:  aws.String(queueName),
 		Attributes: attrsMap,
-	}, nil
-}
-
-type GenerateGetQueueUrlInputFunc func(ctx context.Context, topic string) (*sqs.GetQueueUrlInput, error)
-
-func GenerateGetQueueUrlInputDefault(ctx context.Context, topic string) (*sqs.GetQueueUrlInput, error) {
-	return &sqs.GetQueueUrlInput{
-		QueueName: aws.String(topic),
 	}, nil
 }
 

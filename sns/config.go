@@ -39,9 +39,6 @@ func (c *PublisherConfig) Validate() error {
 	if c.AWSConfig.Credentials == nil {
 		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AWSConfig.Credentials is nil"))
 	}
-	if c.TopicResolver == nil {
-		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.TopicResolver is nil"))
-	}
 
 	return err
 }
@@ -86,9 +83,6 @@ func (c *SubscriberConfig) Validate() error {
 	}
 	if c.GenerateSqsQueueName == nil {
 		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.GenerateSqsQueueName is nil"))
-	}
-	if c.TopicResolver == nil {
-		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.TopicResolver is nil"))
 	}
 
 	return err

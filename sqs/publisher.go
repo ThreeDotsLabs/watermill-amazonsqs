@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -17,31 +16,28 @@ type Publisher struct {
 	config PublisherConfig
 	logger watermill.LoggerAdapter
 	sqs    *sqs.Client
-
-	queuesCache     map[string]*string
-	queuesCacheLock sync.RWMutex
 }
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
 	config.setDefaults()
 
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &Publisher{
-		sqs:         sqs.NewFromConfig(config.AWSConfig),
-		config:      config,
-		logger:      logger,
-		queuesCache: make(map[string]*string),
+		sqs:    sqs.NewFromConfig(config.AWSConfig),
+		config: config,
+		logger: logger,
 	}, nil
 }
 
 func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	ctx := context.Background()
 
-	queueUrl, err := p.GetOrCreateQueueUrl(ctx, topic)
+	queueName, queueUrl, err := p.GetOrCreateQueueUrl(ctx, topic)
 	if err != nil {
 		return fmt.Errorf("cannot get queue url: %w", err)
-	}
-	if queueUrl == nil {
-		return fmt.Errorf("returned queueUrl is nil")
 	}
 
 	for _, msg := range messages {
@@ -52,12 +48,20 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 
 		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
 
-		input, err := p.config.GenerateSendMessageInput(ctx, *queueUrl, sqsMsg)
+		input, err := p.config.GenerateSendMessageInput(ctx, queueUrl, sqsMsg)
 		if err != nil {
 			return fmt.Errorf("cannot generate send message input: %w", err)
 		}
 
 		_, err = p.sqs.SendMessage(ctx, input)
+		var queueDoesNotExistErr *types.QueueDoesNotExist
+		if errors.As(err, &queueDoesNotExistErr) && !p.config.DoNotCreateQueueIfNotExists {
+			// GetOrCreateQueueUrl may not create queue if QueueUrlResolver doesn't check if queue exists
+			_, err := p.createQueue(ctx, topic, queueName, &queueUrl)
+			if err != nil {
+				return err
+			}
+		}
 		if err != nil {
 			return fmt.Errorf("cannot send message: %w", err)
 		}
@@ -66,75 +70,67 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	return nil
 }
 
-func (p *Publisher) GetOrCreateQueueUrl(ctx context.Context, topic string) (queueUrl *string, err error) {
-	getQueueInput, err := p.config.GenerateGetQueueUrlInput(ctx, topic)
+// todo: add types for queueName, etc. ? as it becomes messy what is what
+
+// todo: name is stupid as creation is conditional
+func (p *Publisher) GetOrCreateQueueUrl(ctx context.Context, topic string) (queueName string, queueURL string, err error) {
+	queueName, queueUrl, exists, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
+		Topic:     topic,
+		SqsClient: p.sqs,
+		Logger:    p.logger,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
+		return "", "", err
+	}
+	if exists {
+		return queueName, *queueUrl, nil
 	}
 
-	var getQueueInputHash string
-
-	if !p.config.DoNotCacheQueues {
-		getQueueInputHash = generateGetQueueUrlInputHash(getQueueInput)
-
-		if getQueueInputHash != "" {
-			p.queuesCacheLock.RLock()
-			var ok bool
-			queueUrl, ok = p.queuesCache[getQueueInputHash]
-			p.queuesCacheLock.RUnlock()
-
-			if ok {
-				p.logger.Trace("Used cache", watermill.LogFields{
-					"topic": topic,
-					"queue": *queueUrl,
-					"hash":  getQueueInputHash,
-				})
-				return queueUrl, nil
-			}
-		}
-	}
-
-	defer func() {
-		if err == nil && getQueueInputHash != "" {
-			p.queuesCacheLock.Lock()
-			p.queuesCache[getQueueInputHash] = queueUrl
-			p.queuesCacheLock.Unlock()
-
-			p.logger.Trace("Stored cache", watermill.LogFields{
-				"topic": topic,
-				"queue": *queueUrl,
-				"hash":  getQueueInputHash,
-			})
-		}
-	}()
-
-	queueUrl, err = getQueueUrl(ctx, p.sqs, topic, getQueueInput)
-	if err == nil {
-		return queueUrl, nil
-	}
-
-	var queueDoesNotExistsErr *types.QueueDoesNotExist
-	if errors.As(err, &queueDoesNotExistsErr) && p.config.CreateQueueIfNotExists {
-		input, err := p.config.GenerateCreateQueueInput(ctx, topic, p.config.CreateQueueConfig)
+	if !p.config.DoNotCreateQueueIfNotExists {
+		queueUrl, err := p.createQueue(ctx, topic, queueName, queueUrl)
 		if err != nil {
-			return nil, fmt.Errorf("cannot generate create queue input: %w", err)
+			return "", "", err
 		}
 
-		queueUrl, err = createQueue(ctx, p.sqs, input)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create queue: %w", err)
-		}
-		// queue was created in the meantime
-		if queueUrl == nil {
-			return getQueueUrl(ctx, p.sqs, topic, getQueueInput)
-		}
+		return queueName, queueUrl, nil
 
-		return queueUrl, nil
 	} else {
-		return nil, fmt.Errorf("cannot get queue url: %w", err)
+		return "", "", fmt.Errorf("queue for topic %s doesn't exist", topic)
 	}
 }
 
+func (p *Publisher) createQueue(ctx context.Context, topic string, queueName string, queueUrl *string) (string, error) {
+	input, err := p.config.GenerateCreateQueueInput(ctx, queueName, p.config.CreateQueueConfig)
+	if err != nil {
+		return "", fmt.Errorf("cannot generate create queue input: %w", err)
+	}
+
+	queueUrl, err = createQueue(ctx, p.sqs, input)
+	if err != nil {
+		return "", fmt.Errorf("cannot create queue: %w", err)
+	}
+	// queue was created in the meantime
+	// todo: it's quite ugly
+	if queueUrl == nil {
+		_, queueUrl, exists, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
+			Topic:     topic,
+			SqsClient: p.sqs,
+			Logger:    p.logger,
+		})
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return "", fmt.Errorf("queue doesn't exist after creation")
+		}
+
+		return *queueUrl, nil
+	}
+
+	return *queueUrl, nil
+}
+
+// todo: move (together with other funcs) to url.go
 func generateGetQueueUrlInputHash(getQueueInput *sqs.GetQueueUrlInput) string {
 	// we are not using fmt.Sprintf because of pointers under the hood
 	// we are not hashing specific struct fields to keep forward compatibility
