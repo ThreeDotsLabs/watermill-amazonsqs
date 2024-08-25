@@ -35,7 +35,7 @@ func GenerateTopicArn(region, accountID, topic string) (string, error) {
 	return fmt.Sprintf("arn:aws:sns:%s:%s:%s", region, accountID, topic), nil
 }
 
-func TopicNameFromTopicArn(topicArn string) (string, error) {
+func ExtractTopicNameFromTopicArn(topicArn string) (string, error) {
 	topicArnParts := strings.Split(topicArn, ":")
 	if len(topicArnParts) != 6 {
 		return "", fmt.Errorf("topic arn should have 6 segments, has %d (%s)", len(topicArnParts), topicArn)

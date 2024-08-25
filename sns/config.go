@@ -39,6 +39,9 @@ func (c *PublisherConfig) Validate() error {
 	if c.AWSConfig.Credentials == nil {
 		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AWSConfig.Credentials is nil"))
 	}
+	if c.TopicResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.TopicResolver is nil"))
+	}
 
 	return err
 }
@@ -60,7 +63,8 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic string, attrs Co
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
-	GenerateSqsQueueName func(ctx context.Context, sqsTopicArn string) (string, error)
+	// todo: better name?
+	GenerateSqsQueueName func(ctx context.Context, snsTopic string) (string, error)
 
 	TopicResolver TopicResolver
 
@@ -84,12 +88,15 @@ func (c *SubscriberConfig) Validate() error {
 	if c.GenerateSqsQueueName == nil {
 		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.GenerateSqsQueueName is nil"))
 	}
+	if c.TopicResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.TopicResolver is nil"))
+	}
 
 	return err
 }
 
-func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, sqsTopicArn string) (string, error) {
-	topicName, err := TopicNameFromTopicArn(sqsTopicArn)
+func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, snsTopic string) (string, error) {
+	topicName, err := ExtractTopicNameFromTopicArn(snsTopic)
 	if err != nil {
 		return "", err
 	}

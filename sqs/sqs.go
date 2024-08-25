@@ -9,13 +9,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input *sqs.GetQueueUrlInput) (*string, error) {
+type QueueURL string
+
+type QueueName string
+
+func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input *sqs.GetQueueUrlInput) (*QueueURL, error) {
 	getQueueOutput, err := sqsClient.GetQueueUrl(ctx, input)
 
 	if err != nil || getQueueOutput.QueueUrl == nil {
 		return nil, fmt.Errorf("cannot get queue %s: %w", topic, err)
 	}
-	return getQueueOutput.QueueUrl, nil
+
+	queueURL := QueueURL(*getQueueOutput.QueueUrl)
+
+	return &queueURL, nil
 }
 
 // todo: wtf about that?
@@ -23,7 +30,7 @@ func createQueue(
 	ctx context.Context,
 	sqsClient *sqs.Client,
 	createQueueParams *sqs.CreateQueueInput,
-) (*string, error) {
+) (*QueueURL, error) {
 	createQueueOutput, err := sqsClient.CreateQueue(ctx, createQueueParams)
 	// possible scenarios:
 	// 1. queue already exists, but with different params
@@ -40,16 +47,20 @@ func createQueue(
 		return nil, fmt.Errorf("cannot create queue, queueUrl is nil")
 	}
 
-	return createQueueOutput.QueueUrl, nil
+	queueURL := QueueURL(*createQueueOutput.QueueUrl)
+
+	return &queueURL, nil
 }
 
-func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string, error) {
+func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *QueueURL) (*string, error) {
 	if url == nil {
 		return nil, fmt.Errorf("queue URL is nil")
 	}
 
+	urlStr := string(*url)
+
 	attrResult, err := sqsClient.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
-		QueueUrl: url,
+		QueueUrl: &urlStr,
 		AttributeNames: []types.QueueAttributeName{
 			types.QueueAttributeNameQueueArn,
 		},

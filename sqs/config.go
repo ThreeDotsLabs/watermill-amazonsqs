@@ -127,45 +127,47 @@ func (c *PublisherConfig) Validate() error {
 	return err
 }
 
-type GenerateCreateQueueInputFunc func(ctx context.Context, queueName string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error)
+type GenerateCreateQueueInputFunc func(ctx context.Context, queueName QueueName, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error)
 
-func GenerateCreateQueueInputDefault(ctx context.Context, queueName string, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error) {
+func GenerateCreateQueueInputDefault(ctx context.Context, queueName QueueName, attrs QueueConfigAttributes) (*sqs.CreateQueueInput, error) {
 	attrsMap, err := attrs.Attributes()
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate attributes for queue %s: %w", queueName, err)
 	}
 
 	return &sqs.CreateQueueInput{
-		QueueName:  aws.String(queueName),
+		QueueName:  aws.String(string(queueName)),
 		Attributes: attrsMap,
 	}, nil
 }
 
-type GenerateReceiveMessageInputFunc func(ctx context.Context, queueURL string) (*sqs.ReceiveMessageInput, error)
+type GenerateReceiveMessageInputFunc func(ctx context.Context, queueURL QueueURL) (*sqs.ReceiveMessageInput, error)
 
-func GenerateReceiveMessageInputDefault(ctx context.Context, queueURL string) (*sqs.ReceiveMessageInput, error) {
+func GenerateReceiveMessageInputDefault(ctx context.Context, queueURL QueueURL) (*sqs.ReceiveMessageInput, error) {
 	return &sqs.ReceiveMessageInput{
-		QueueUrl:              aws.String(queueURL),
+		QueueUrl:              aws.String(string(queueURL)),
 		MessageAttributeNames: []string{"All"},
 		WaitTimeSeconds:       20, // 20 is max at the moment
 		MaxNumberOfMessages:   1,  // Currently default value.
 	}, nil
 }
 
-type GenerateDeleteMessageInputFunc func(ctx context.Context, queueURL string, receiptHandle *string) (*sqs.DeleteMessageInput, error)
+type GenerateDeleteMessageInputFunc func(ctx context.Context, queueURL QueueURL, receiptHandle *string) (*sqs.DeleteMessageInput, error)
 
-func GenerateDeleteMessageInputDefault(ctx context.Context, queueURL string, receiptHandle *string) (*sqs.DeleteMessageInput, error) {
+func GenerateDeleteMessageInputDefault(ctx context.Context, queueURL QueueURL, receiptHandle *string) (*sqs.DeleteMessageInput, error) {
 	return &sqs.DeleteMessageInput{
-		QueueUrl:      aws.String(queueURL),
+		QueueUrl:      aws.String(string(queueURL)),
 		ReceiptHandle: receiptHandle,
 	}, nil
 }
 
-type GenerateSendMessageInputFunc func(ctx context.Context, queueURL string, msg *types.Message) (*sqs.SendMessageInput, error)
+type GenerateSendMessageInputFunc func(ctx context.Context, queueURL QueueURL, msg *types.Message) (*sqs.SendMessageInput, error)
 
-func GenerateSendMessageInputDefault(ctx context.Context, queueURL string, msg *types.Message) (*sqs.SendMessageInput, error) {
+func GenerateSendMessageInputDefault(ctx context.Context, queueURL QueueURL, msg *types.Message) (*sqs.SendMessageInput, error) {
+	urlStr := string(queueURL)
+
 	return &sqs.SendMessageInput{
-		QueueUrl:          &queueURL,
+		QueueUrl:          &urlStr,
 		MessageAttributes: msg.MessageAttributes,
 		MessageBody:       msg.Body,
 	}, nil

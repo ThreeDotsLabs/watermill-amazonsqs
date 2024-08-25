@@ -76,7 +76,7 @@ func (p *Publisher) CreateTopic(ctx context.Context, topic string) (string, erro
 		return "", err
 	}
 
-	topicName, err := TopicNameFromTopicArn(topicArn)
+	topicName, err := ExtractTopicNameFromTopicArn(topicArn)
 	if err != nil {
 		return "", err
 	}
