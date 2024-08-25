@@ -31,8 +31,13 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 	}, nil
 }
 
-func (p *Publisher) Publish(topicArn string, messages ...*message.Message) error {
+func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	ctx := context.Background()
+
+	topicArn, err := p.config.TopicResolver.ResolveTopic(ctx, topic)
+	if err != nil {
+		return err
+	}
 
 	for _, msg := range messages {
 		p.logger.Debug("Sending message", watermill.LogFields{
@@ -50,7 +55,7 @@ func (p *Publisher) Publish(topicArn string, messages ...*message.Message) error
 			// in most cases topic will already exist - as form of optimisation we
 			// assume that topic exists to avoid unnecessary API calls
 			// we create topic only if it doesn't exist
-			if _, err := p.CreateTopic(ctx, topicArn); err != nil {
+			if _, err := p.CreateTopic(ctx, topic); err != nil {
 				return fmt.Errorf("failed to create topic: %w", err)
 			}
 
@@ -65,7 +70,12 @@ func (p *Publisher) Publish(topicArn string, messages ...*message.Message) error
 	return nil
 }
 
-func (p *Publisher) CreateTopic(ctx context.Context, topicArn string) (string, error) {
+func (p *Publisher) CreateTopic(ctx context.Context, topic string) (string, error) {
+	topicArn, err := p.config.TopicResolver.ResolveTopic(ctx, topic)
+	if err != nil {
+		return "", err
+	}
+
 	topicName, err := TopicNameFromTopicArn(topicArn)
 	if err != nil {
 		return "", err

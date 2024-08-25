@@ -16,9 +16,34 @@ type PublisherConfig struct {
 	CreateTopicConfig           ConfigAttributes
 	DoNotCreateTopicIfNotExists bool
 
+	TopicResolver TopicResolver
+
 	GenerateCreateTopicInput GenerateCreateTopicInputFunc
 
 	Marshaler Marshaler
+}
+
+func (c *PublisherConfig) setDefaults() {
+	if c.Marshaler == nil {
+		c.Marshaler = DefaultMarshalerUnmarshaler{}
+	}
+
+	if c.GenerateCreateTopicInput == nil {
+		c.GenerateCreateTopicInput = GenerateCreateTopicInputDefault
+	}
+}
+
+func (c *PublisherConfig) Validate() error {
+	var err error
+
+	if c.AWSConfig.Credentials == nil {
+		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AWSConfig.Credentials is nil"))
+	}
+	if c.TopicResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.TopicResolver is nil"))
+	}
+
+	return err
 }
 
 type GenerateCreateTopicInputFunc func(ctx context.Context, topic string, attrs ConfigAttributes) (sns.CreateTopicInput, error)
@@ -35,29 +60,12 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic string, attrs Co
 	}, nil
 }
 
-func (c *PublisherConfig) setDefaults() {
-	if c.Marshaler == nil {
-		c.Marshaler = DefaultMarshalerUnmarshaler{}
-	}
-	if c.GenerateCreateTopicInput == nil {
-		c.GenerateCreateTopicInput = GenerateCreateTopicInputDefault
-	}
-}
-
-func (c *PublisherConfig) Validate() error {
-	var err error
-
-	if c.AWSConfig.Credentials == nil {
-		err = errors.Join(err, fmt.Errorf("sns.PublisherConfig.AWSConfig.Credentials is nil"))
-	}
-
-	return err
-}
-
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
 	GenerateSqsQueueName func(ctx context.Context, sqsTopicArn string) (string, error)
+
+	TopicResolver TopicResolver
 
 	GenerateSubscribeInput GenerateSubscribeInputFn
 
@@ -70,15 +78,6 @@ func (c *SubscriberConfig) SetDefaults() {
 	}
 }
 
-func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, sqsTopicArn string) (string, error) {
-	topicName, err := TopicNameFromTopicArn(sqsTopicArn)
-	if err != nil {
-		return "", err
-	}
-
-	return topicName, nil
-}
-
 func (c *SubscriberConfig) Validate() error {
 	var err error
 
@@ -88,8 +87,20 @@ func (c *SubscriberConfig) Validate() error {
 	if c.GenerateSqsQueueName == nil {
 		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.GenerateSqsQueueName is nil"))
 	}
+	if c.TopicResolver == nil {
+		err = errors.Join(err, fmt.Errorf("sns.SubscriberConfig.TopicResolver is nil"))
+	}
 
 	return err
+}
+
+func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, sqsTopicArn string) (string, error) {
+	topicName, err := TopicNameFromTopicArn(sqsTopicArn)
+	if err != nil {
+		return "", err
+	}
+
+	return topicName, nil
 }
 
 type GenerateSubscribeInputFn func(ctx context.Context, params GenerateSubscribeInputParams) (*sns.SubscribeInput, error)

@@ -49,9 +49,14 @@ func NewSubscriber(
 	}, nil
 }
 
-func (s *Subscriber) Subscribe(ctx context.Context, snsTopicArn string) (<-chan *message.Message, error) {
+func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	snsTopicArn, err := s.config.TopicResolver.ResolveTopic(ctx, topic)
+	if err != nil {
+		return nil, err
+	}
+
 	if !s.config.DoNotSubscribeToSns {
-		if err := s.SubscribeInitializeWithContext(ctx, snsTopicArn); err != nil {
+		if err := s.SubscribeInitializeWithContext(ctx, topic); err != nil {
 			return nil, err
 		}
 	}
@@ -68,7 +73,12 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 	return s.SubscribeInitializeWithContext(context.Background(), topic)
 }
 
-func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, snsTopicArn string) error {
+func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
+	snsTopicArn, err := s.config.TopicResolver.ResolveTopic(ctx, topic)
+	if err != nil {
+		return err
+	}
+
 	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, snsTopicArn)
 	if err != nil {
 		return fmt.Errorf("failed to generate SQS queue name: %w", err)
