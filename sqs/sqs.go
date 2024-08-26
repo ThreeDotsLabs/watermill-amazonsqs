@@ -76,7 +76,7 @@ func GetARNUrl(ctx context.Context, sqsClient *sqs.Client, url *string) (*string
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("cannot get ARN queue %s: %w", url, err)
+		return nil, fmt.Errorf("cannot get ARN queue %v: %w", url, err)
 	}
 
 	arn := attrResult.Attributes[string(types.QueueAttributeNameQueueArn)]
