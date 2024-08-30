@@ -1,23 +1,39 @@
-Watermill - Amazon SNS/SQS PubSub Adapter
+# Watermill Amazon SQS/SNS Pub/Sub
+<img align="right" width="200" src="https://threedots.tech/watermill-io/watermill-logo.png">
 
-**This package is still under development and NOT ready for production use.**
+[![CI Status](https://github.com/ThreeDotsLabs/watermill-amazonsqs/actions/workflows/master.yml/badge.svg)](https://github.com/ThreeDotsLabs/watermill-amazonsqs/actions/workflows/master.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ThreeDotsLabs/watermill-amazonsqs)](https://goreportcard.com/report/github.com/ThreeDotsLabs/watermill-amazonsqs)
 
-#### Notes for SQS 
+This is Pub/Sub for the [Watermill](https://watermill.io/) project.
+It uses the [Amazon SQS](https://aws.amazon.com/sqs/) and [Amazon SNS](https://aws.amazon.com/sns/) services.
 
-A new SQS Publisher will create the queue if it does not exist.
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for more information about running and testing.
 
-#### Notes for SNS
+Watermill is a Go library for working efficiently with message streams. It is intended
+for building event driven applications, enabling event sourcing, RPC over messages,
+sagas and basically whatever else comes to your mind. You can use conventional pub/sub
+implementations like Kafka or RabbitMQ, but also HTTP or MySQL binlog if that fits your use case.
 
-A new SQS Publisher will create the topic if it does not exist. Be aware that without any subsciptions the messages published to that newly created topic would be lost.  Make sure you always create the topic and subscriptions before you start an SNS publisher.
+All Pub/Sub implementations can be found at [https://watermill.io/pubsubs/](https://watermill.io/pubsubs/).
 
-#### Unit Tests
+Documentation: https://watermill.io/
 
-You can run the unit tests by simply running  the command: `go test -cover -race ./...`
+Getting started guide: https://watermill.io/docs/getting-started/
 
-#### Development and Testing
+Issues: https://github.com/ThreeDotsLabs/watermill/issues
 
-To try the  in test mode (using [goaws](https://github.com/p4tin/goaws))
-- start docker using: `docker-compose up -d`
-- export AWS_ENDPOINT=http://localhost:4100/
+## Contributing
 
-Now you can run the application: `go run cmd/main.go`
+All contributions are very much welcome. If you'd like to help with Watermill development,
+please see [open issues](https://github.com/ThreeDotsLabs/watermill/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen+)
+and submit your pull request via GitHub.
+
+## Support
+
+If you didn't find the answer to your question in [the documentation](https://watermill.io/), feel free to ask us directly!
+
+Please join us on the `#watermill` channel on the [Three Dots Labs Discord](https://discord.gg/QV6VFg4YQE).
+
+## License
+
+[MIT License](./LICENSE)
