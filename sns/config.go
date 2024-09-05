@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 )
@@ -63,19 +64,29 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic string, attrs Co
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
-	// todo: better name?
+	// todo: better name? define signature
 	GenerateSqsQueueName func(ctx context.Context, snsTopic string) (string, error)
 
 	TopicResolver TopicResolver
 
 	GenerateSubscribeInput GenerateSubscribeInputFn
 
+	GenerateQueueAccessPolicy GenerateQueueAccessPolicyFn
+
+	// todo: rename?
 	DoNotSubscribeToSns bool
+
+	// todo: info what perm it requires ("sqs:SetQueueAttributes"?)
+	// link to docs
+	DoNotSetQueueAccessPolicy bool
 }
 
 func (c *SubscriberConfig) SetDefaults() {
 	if c.GenerateSubscribeInput == nil {
 		c.GenerateSubscribeInput = GenerateSubscribeInputDefault
+	}
+	if c.GenerateQueueAccessPolicy == nil {
+		c.GenerateQueueAccessPolicy = GenerateQueueAccessPolicyDefault
 	}
 }
 
@@ -120,6 +131,35 @@ func GenerateSubscribeInputDefault(ctx context.Context, params GenerateSubscribe
 		Endpoint: &params.SqsQueueArn,
 		Attributes: map[string]string{
 			"RawMessageDelivery": "true",
+		},
+	}, nil
+}
+
+type GenerateQueueAccessPolicyFn func(ctx context.Context, params GenerateQueueAccessPolicyParams) (map[string]any, error)
+
+type GenerateQueueAccessPolicyParams struct {
+	SqsQueueArn string
+	SnsTopicArn string
+	SqsURL      sqs.QueueURL
+}
+
+func GenerateQueueAccessPolicyDefault(ctx context.Context, params GenerateQueueAccessPolicyParams) (map[string]any, error) {
+	return map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []map[string]any{
+			{
+				"Effect": "Allow",
+				"Principal": map[string]string{
+					"Service": "sns.amazonaws.com",
+				},
+				"Action":   "sqs:SendMessage",
+				"Resource": params.SqsQueueArn,
+				"Condition": map[string]any{
+					"ArnEquals": map[string]string{
+						"aws:SourceArn": params.SnsTopicArn,
+					},
+				},
+			},
 		},
 	}, nil
 }

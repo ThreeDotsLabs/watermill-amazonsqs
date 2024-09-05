@@ -22,7 +22,8 @@ type Subscriber struct {
 	closing       chan struct{}
 	subscribersWg sync.WaitGroup
 
-	closed bool
+	closed     bool
+	closedLock sync.Mutex
 }
 
 func NewSubscriber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Subscriber, error) {
@@ -256,6 +257,9 @@ func (s *Subscriber) deleteMessage(ctx context.Context, queueURL QueueURL, recei
 }
 
 func (s *Subscriber) Close() error {
+	s.closedLock.Lock()
+	defer s.closedLock.Unlock()
+
 	if s.closed {
 		return nil
 	}

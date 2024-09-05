@@ -2,20 +2,24 @@ package sns
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	awsSqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 type Subscriber struct {
 	config SubscriberConfig
 	logger watermill.LoggerAdapter
 
-	sns *sns.Client
-	sqs *sqs.Subscriber
+	sns       *sns.Client
+	sqs       *sqs.Subscriber
+	sqsClient *awsSqs.Client
 }
 
 func NewSubscriber(
@@ -42,10 +46,11 @@ func NewSubscriber(
 	}
 
 	return &Subscriber{
-		config: config,
-		logger: logger,
-		sns:    sns.NewFromConfig(config.AWSConfig),
-		sqs:    sqs,
+		config:    config,
+		logger:    logger,
+		sns:       sns.NewFromConfig(config.AWSConfig),
+		sqsClient: awsSqs.NewFromConfig(config.AWSConfig),
+		sqs:       sqs,
 	}, nil
 }
 
@@ -97,6 +102,12 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 		return fmt.Errorf("cannot get queue ARN for topic %s: %w", snsTopicArn, err)
 	}
 
+	if !s.config.DoNotSetQueueAccessPolicy {
+		if err := s.setSqsQuePolicy(ctx, *sqsQueueArn, snsTopicArn, *sqsURL); err != nil {
+			return fmt.Errorf("cannot set queue access policy for topic %s: %w", snsTopicArn, err)
+		}
+	}
+
 	s.logger.Info("Subscribing to SNS", watermill.LogFields{
 		"sns_topic_arn": snsTopicArn,
 		"sqs_topic":     sqsTopic,
@@ -115,6 +126,34 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 		return fmt.Errorf("cannot subscribe to SNS[%s] from %s: %w", snsTopicArn, *sqsQueueArn, err)
 	}
 
+	return nil
+}
+
+func (s *Subscriber) setSqsQuePolicy(ctx context.Context, sqsQueueArn string, snsTopicArn string, sqsURL sqs.QueueURL) error {
+	policy, err := s.config.GenerateQueueAccessPolicy(ctx, GenerateQueueAccessPolicyParams{
+		SqsQueueArn: sqsQueueArn,
+		SnsTopicArn: snsTopicArn,
+		SqsURL:      sqsURL,
+	})
+
+	policyJSON, err := json.Marshal(policy)
+	if err != nil {
+		return fmt.Errorf("cannot marshal policy: %w", err)
+	}
+
+	s.logger.Debug("Setting queue access policy", watermill.LogFields{
+		"policy": string(policyJSON),
+	})
+
+	_, err = s.sqsClient.SetQueueAttributes(ctx, &awsSqs.SetQueueAttributesInput{
+		QueueUrl: aws.String(string(sqsURL)),
+		Attributes: map[string]string{
+			"Policy": string(policyJSON),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("cannot set queue policy: %w", err)
+	}
 	return nil
 }
 
