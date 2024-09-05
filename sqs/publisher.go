@@ -34,7 +34,7 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	ctx := context.Background()
 
-	queueName, queueUrl, err := p.GetOrCreateQueueUrl(ctx, topic)
+	queueName, queueUrl, err := p.GetQueueUrl(ctx, topic, !p.config.DoNotCreateQueueIfNotExists)
 	if err != nil {
 		return fmt.Errorf("cannot get queue url: %w", err)
 	}
@@ -55,7 +55,7 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 		_, err = p.sqs.SendMessage(ctx, input)
 		var queueDoesNotExistErr *types.QueueDoesNotExist
 		if errors.As(err, &queueDoesNotExistErr) && !p.config.DoNotCreateQueueIfNotExists {
-			// GetOrCreateQueueUrl may not create queue if QueueUrlResolver doesn't check if queue exists
+			// GetQueueUrl may not create queue if QueueUrlResolver doesn't check if queue exists
 			_, err := p.createQueue(ctx, topic, queueName)
 			if err != nil {
 				return err
@@ -69,10 +69,7 @@ func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	return nil
 }
 
-// todo: add types for queueName, etc. ? as it becomes messy what is what
-
-// todo: name is stupid as creation is conditional
-func (p *Publisher) GetOrCreateQueueUrl(ctx context.Context, topic string) (QueueName, QueueURL, error) {
+func (p *Publisher) GetQueueUrl(ctx context.Context, topic string, createIfNotExists bool) (QueueName, QueueURL, error) {
 	resolvedQueue, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
 		Topic:     topic,
 		SqsClient: p.sqs,
@@ -85,7 +82,7 @@ func (p *Publisher) GetOrCreateQueueUrl(ctx context.Context, topic string) (Queu
 		return resolvedQueue.QueueName, *resolvedQueue.QueueURL, nil
 	}
 
-	if !p.config.DoNotCreateQueueIfNotExists {
+	if createIfNotExists {
 		queueUrl, err := p.createQueue(ctx, topic, resolvedQueue.QueueName)
 		if err != nil {
 			return "", "", err
@@ -109,7 +106,6 @@ func (p *Publisher) createQueue(ctx context.Context, topic string, queueName Que
 		return "", fmt.Errorf("cannot create queue: %w", err)
 	}
 	// queue was created in the meantime
-	// todo: it's quite ugly
 	if queueUrl == nil {
 		resolvedQueue, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
 			Topic:     topic,
@@ -129,7 +125,7 @@ func (p *Publisher) createQueue(ctx context.Context, topic string, queueName Que
 	return *queueUrl, nil
 }
 
-func (p *Publisher) GetQueueArn(ctx context.Context, url *QueueURL) (*string, error) {
+func (p *Publisher) GetQueueArn(ctx context.Context, url *QueueURL) (*QueueArn, error) {
 	return getARNUrl(ctx, p.sqs, url)
 }
 

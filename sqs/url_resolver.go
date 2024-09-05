@@ -19,7 +19,8 @@ type QueueUrlResolver interface {
 }
 
 type ResolveQueueUrlParams struct {
-	// todo: doc that it's topic in watermill's nomenclature
+	// Topic passed to Publisher.Publish, Subscriber.Subscribe, etc.
+	// It may be mapped to a different name by QueueUrlResolver.
 	Topic     string
 	SqsClient *sqs.Client
 	Logger    watermill.LoggerAdapter
@@ -35,8 +36,6 @@ type QueueUrlResolverResult struct {
 	// May be nil, if resolver doesn't have information about queue existence.
 	Exists *bool
 }
-
-// todo: add alternative one that statically generates queue name
 
 type GenerateQueueUrlResolver struct {
 	AwsRegion    string
@@ -176,7 +175,6 @@ func GenerateGetQueueUrlInputDefault(ctx context.Context, topic string) (*sqs.Ge
 	}, nil
 }
 
-// todo: test
 type TransparentUrlResolver struct{}
 
 func (p TransparentUrlResolver) ResolveQueueUrl(ctx context.Context, params ResolveQueueUrlParams) (res QueueUrlResolverResult, err error) {

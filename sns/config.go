@@ -47,16 +47,16 @@ func (c *PublisherConfig) Validate() error {
 	return err
 }
 
-type GenerateCreateTopicInputFunc func(ctx context.Context, topic string, attrs ConfigAttributes) (sns.CreateTopicInput, error)
+type GenerateCreateTopicInputFunc func(ctx context.Context, topic TopicName, attrs ConfigAttributes) (sns.CreateTopicInput, error)
 
-func GenerateCreateTopicInputDefault(ctx context.Context, topic string, attrs ConfigAttributes) (sns.CreateTopicInput, error) {
+func GenerateCreateTopicInputDefault(ctx context.Context, topic TopicName, attrs ConfigAttributes) (sns.CreateTopicInput, error) {
 	attrsMap, err := attrs.Attributes()
 	if err != nil {
 		return sns.CreateTopicInput{}, fmt.Errorf("cannot generate attributes for topic %s: %w", topic, err)
 	}
 
 	return sns.CreateTopicInput{
-		Name:       aws.String(topic),
+		Name:       aws.String(string(topic)),
 		Attributes: attrsMap,
 	}, nil
 }
@@ -64,20 +64,19 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic string, attrs Co
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
-	// todo: better name? define signature
-	GenerateSqsQueueName func(ctx context.Context, snsTopic string) (string, error)
-
 	TopicResolver TopicResolver
+
+	GenerateSqsQueueName GenerateSqsQueueNameFn
 
 	GenerateSubscribeInput GenerateSubscribeInputFn
 
 	GenerateQueueAccessPolicy GenerateQueueAccessPolicyFn
 
-	// todo: rename?
-	DoNotSubscribeToSns bool
+	DoNotCreateSqsSubscription bool
 
-	// todo: info what perm it requires ("sqs:SetQueueAttributes"?)
-	// link to docs
+	// DoNotSetQueueAccessPolicy disables setting the queue access policy.
+	// Described in AWS docs: https://docs.aws.amazon.com/sns/latest/dg/subscribe-sqs-queue-to-sns-topic.html#SendMessageToSQS.sqs.permissions
+	// It requires "sqs:SetQueueAttributes" permission.
 	DoNotSetQueueAccessPolicy bool
 }
 
@@ -106,13 +105,15 @@ func (c *SubscriberConfig) Validate() error {
 	return err
 }
 
-func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, snsTopic string) (string, error) {
+type GenerateSqsQueueNameFn func(ctx context.Context, snsTopic TopicArn) (string, error)
+
+func GenerateSqsQueueNameEqualToTopicName(ctx context.Context, snsTopic TopicArn) (string, error) {
 	topicName, err := ExtractTopicNameFromTopicArn(snsTopic)
 	if err != nil {
 		return "", err
 	}
 
-	return topicName, nil
+	return string(topicName), nil
 }
 
 type GenerateSubscribeInputFn func(ctx context.Context, params GenerateSubscribeInputParams) (*sns.SubscribeInput, error)
@@ -120,15 +121,15 @@ type GenerateSubscribeInputFn func(ctx context.Context, params GenerateSubscribe
 type GenerateSubscribeInputParams struct {
 	SqsTopic string
 
-	SnsTopicArn string
-	SqsQueueArn string
+	SnsTopicArn TopicArn
+	SqsQueueArn sqs.QueueArn
 }
 
 func GenerateSubscribeInputDefault(ctx context.Context, params GenerateSubscribeInputParams) (*sns.SubscribeInput, error) {
 	return &sns.SubscribeInput{
 		Protocol: aws.String("sqs"),
-		TopicArn: &params.SnsTopicArn,
-		Endpoint: &params.SqsQueueArn,
+		TopicArn: aws.String(string(params.SnsTopicArn)),
+		Endpoint: aws.String(string(params.SqsQueueArn)),
 		Attributes: map[string]string{
 			"RawMessageDelivery": "true",
 		},
@@ -138,8 +139,8 @@ func GenerateSubscribeInputDefault(ctx context.Context, params GenerateSubscribe
 type GenerateQueueAccessPolicyFn func(ctx context.Context, params GenerateQueueAccessPolicyParams) (map[string]any, error)
 
 type GenerateQueueAccessPolicyParams struct {
-	SqsQueueArn string
-	SnsTopicArn string
+	SqsQueueArn sqs.QueueArn
+	SnsTopicArn TopicArn
 	SqsURL      sqs.QueueURL
 }
 
@@ -156,7 +157,7 @@ func GenerateQueueAccessPolicyDefault(ctx context.Context, params GenerateQueueA
 				"Resource": params.SqsQueueArn,
 				"Condition": map[string]any{
 					"ArnEquals": map[string]string{
-						"aws:SourceArn": params.SnsTopicArn,
+						"aws:SourceArn": string(params.SnsTopicArn),
 					},
 				},
 			},

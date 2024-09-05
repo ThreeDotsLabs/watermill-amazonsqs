@@ -60,7 +60,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		return nil, err
 	}
 
-	if !s.config.DoNotSubscribeToSns {
+	if !s.config.DoNotCreateSqsSubscription {
 		if err := s.SubscribeInitializeWithContext(ctx, topic); err != nil {
 			return nil, err
 		}
@@ -129,7 +129,7 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	return nil
 }
 
-func (s *Subscriber) setSqsQuePolicy(ctx context.Context, sqsQueueArn string, snsTopicArn string, sqsURL sqs.QueueURL) error {
+func (s *Subscriber) setSqsQuePolicy(ctx context.Context, sqsQueueArn sqs.QueueArn, snsTopicArn TopicArn, sqsURL sqs.QueueURL) error {
 	policy, err := s.config.GenerateQueueAccessPolicy(ctx, GenerateQueueAccessPolicyParams{
 		SqsQueueArn: sqsQueueArn,
 		SnsTopicArn: snsTopicArn,

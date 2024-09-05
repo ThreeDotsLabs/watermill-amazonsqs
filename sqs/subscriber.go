@@ -61,7 +61,6 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		Logger:    s.logger,
 	}
 
-	// todo: what if doesn't exists?
 	resolvedQueue, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
 	if err != nil {
 		return nil, err
@@ -82,7 +81,6 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 			return nil, fmt.Errorf("cannot create queue %s: %w", topic, err)
 		}
 
-		// todo: it's quite ugly
 		resolvedQueue, err = s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
 		if err != nil {
 			return nil, err
@@ -302,16 +300,12 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	return nil
 }
 
-// todo: duplicated in subscribe?
 func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*QueueURL, error) {
-	resolveQueueParams := ResolveQueueUrlParams{
+	resolvedQueue, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
 		Topic:     topic,
 		SqsClient: s.sqs,
 		Logger:    s.logger,
-	}
-
-	// todo: what if doesn't exists?
-	resolvedQueue, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, resolveQueueParams)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
@@ -322,7 +316,7 @@ func (s *Subscriber) GetQueueUrl(ctx context.Context, topic string) (*QueueURL, 
 	return resolvedQueue.QueueURL, nil
 }
 
-func (s *Subscriber) GetQueueArn(ctx context.Context, url *QueueURL) (*string, error) {
+func (s *Subscriber) GetQueueArn(ctx context.Context, url *QueueURL) (*QueueArn, error) {
 	return getARNUrl(ctx, s.sqs, url)
 }
 

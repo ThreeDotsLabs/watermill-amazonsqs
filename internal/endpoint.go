@@ -1,4 +1,4 @@
-package connection
+package internal
 
 import (
 	"github.com/aws/aws-sdk-go-v2/aws"

@@ -7,14 +7,14 @@ import (
 )
 
 type TopicResolver interface {
-	ResolveTopic(ctx context.Context, topic string) (snsTopic string, err error)
+	ResolveTopic(ctx context.Context, topic string) (snsTopic TopicArn, err error)
 }
 
 type TransparentTopicResolver struct{}
 
-func (a TransparentTopicResolver) ResolveTopic(ctx context.Context, topic string) (snsTopic string, err error) {
+func (a TransparentTopicResolver) ResolveTopic(ctx context.Context, topic string) (snsTopic TopicArn, err error) {
 	// we are passing topic ARN as topic
-	return topic, nil
+	return TopicArn(topic), nil
 }
 
 type GenerateArnTopicResolver struct {
@@ -39,6 +39,6 @@ func NewGenerateArnTopicResolver(accountID string, region string) (*GenerateArnT
 	return &GenerateArnTopicResolver{accountID: accountID, region: region}, nil
 }
 
-func (g GenerateArnTopicResolver) ResolveTopic(ctx context.Context, topic string) (snsTopic string, err error) {
+func (g GenerateArnTopicResolver) ResolveTopic(ctx context.Context, topic string) (snsTopic TopicArn, err error) {
 	return GenerateTopicArn(g.region, g.accountID, topic)
 }

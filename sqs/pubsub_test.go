@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/internal"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
@@ -245,10 +245,10 @@ func TestPublisher_GetOrCreateQueueUrl_is_idempotent(t *testing.T) {
 
 	topicName := watermill.NewUUID()
 
-	name1, url1, err := pub.(*sqs.Publisher).GetOrCreateQueueUrl(context.Background(), topicName)
+	name1, url1, err := pub.(*sqs.Publisher).GetQueueUrl(context.Background(), topicName, true)
 	require.NoError(t, err)
 
-	name2, url2, err := pub.(*sqs.Publisher).GetOrCreateQueueUrl(context.Background(), topicName)
+	name2, url2, err := pub.(*sqs.Publisher).GetQueueUrl(context.Background(), topicName, true)
 	require.NoError(t, err)
 
 	require.Equal(t, url1, url2)
@@ -359,7 +359,7 @@ func newAwsConfig(t *testing.T) aws.Config {
 				SecretAccessKey: "test",
 			},
 		}),
-		connection.SetEndPoint("http://localhost:4566"),
+		internal.SetEndPoint("http://localhost:4566"),
 	)
 	require.NoError(t, err)
 	return cfg

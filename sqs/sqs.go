@@ -13,6 +13,8 @@ type QueueURL string
 
 type QueueName string
 
+type QueueArn string
+
 func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input *sqs.GetQueueUrlInput) (*QueueURL, error) {
 	getQueueOutput, err := sqsClient.GetQueueUrl(ctx, input)
 
@@ -25,7 +27,6 @@ func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input
 	return &queueURL, nil
 }
 
-// todo: wtf about that?
 func createQueue(
 	ctx context.Context,
 	sqsClient *sqs.Client,
@@ -52,7 +53,7 @@ func createQueue(
 	return &queueURL, nil
 }
 
-func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *QueueURL) (*string, error) {
+func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *QueueURL) (*QueueArn, error) {
 	if url == nil {
 		return nil, fmt.Errorf("queue URL is nil")
 	}
@@ -69,7 +70,7 @@ func getARNUrl(ctx context.Context, sqsClient *sqs.Client, url *QueueURL) (*stri
 		return nil, fmt.Errorf("cannot get ARN queue %s: %w", *url, err)
 	}
 
-	arn := attrResult.Attributes[string(types.QueueAttributeNameQueueArn)]
+	arn := QueueArn(attrResult.Attributes[string(types.QueueAttributeNameQueueArn)])
 
 	return &arn, nil
 }

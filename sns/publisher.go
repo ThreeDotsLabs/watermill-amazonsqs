@@ -94,7 +94,7 @@ func (p *Publisher) CreateTopic(ctx context.Context, topic string) (string, erro
 		return "", fmt.Errorf("created topic arn is nil")
 	}
 
-	if *createdTopicArn != topicArn {
+	if *createdTopicArn != string(topicArn) {
 		return "", fmt.Errorf(
 			"created topic arn (%s) is not equal to expected topic arn (%s), please check the configuration",
 			*createdTopicArn,

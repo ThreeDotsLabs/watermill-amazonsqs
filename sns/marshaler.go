@@ -12,12 +12,12 @@ import (
 const UUIDAttribute = "UUID"
 
 type Marshaler interface {
-	Marshal(topicArn string, msg *message.Message) *sns.PublishInput
+	Marshal(topicArn TopicArn, msg *message.Message) *sns.PublishInput
 }
 
 type DefaultMarshalerUnmarshaler struct{}
 
-func (d DefaultMarshalerUnmarshaler) Marshal(topicArn string, msg *message.Message) *sns.PublishInput {
+func (d DefaultMarshalerUnmarshaler) Marshal(topicArn TopicArn, msg *message.Message) *sns.PublishInput {
 	// client side uuid
 	// there is a deduplication id that can be use for
 	// fifo queues
@@ -33,7 +33,7 @@ func (d DefaultMarshalerUnmarshaler) Marshal(topicArn string, msg *message.Messa
 		MessageAttributes:      attributes,
 		MessageDeduplicationId: deduplicationId,
 		MessageGroupId:         groupId,
-		TargetArn:              &topicArn,
+		TargetArn:              aws.String(string(topicArn)),
 	}
 }
 

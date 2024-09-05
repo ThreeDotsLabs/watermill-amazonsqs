@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/internal"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
@@ -148,7 +148,7 @@ func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.
 		},
 		sns.SubscriberConfig{
 			AWSConfig: cfg,
-			GenerateSqsQueueName: func(ctx context.Context, sqsTopic string) (string, error) {
+			GenerateSqsQueueName: func(ctx context.Context, sqsTopic sns.TopicArn) (string, error) {
 				return consumerGroup, nil
 			},
 			TopicResolver: topicResolver,
@@ -185,7 +185,7 @@ func GetAWSConfig(t *testing.T) aws.Config {
 
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		connection.SetEndPoint("http://localhost:4566"),
+		internal.SetEndPoint("http://localhost:4566"),
 		awsconfig.WithRegion("us-west-2"),
 	)
 	require.NoError(t, err)
