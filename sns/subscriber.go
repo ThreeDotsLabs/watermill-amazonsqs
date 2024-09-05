@@ -120,6 +120,9 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 		SnsTopicArn: snsTopicArn,
 		SqsQueueArn: *sqsQueueArn,
 	})
+	if err != nil {
+		return fmt.Errorf("cannot generate subscribe input for SNS[%s] from %s: %w", snsTopicArn, *sqsQueueArn, err)
+	}
 
 	subscribeOutput, err := s.sns.Subscribe(ctx, input)
 	if err != nil || subscribeOutput == nil {
