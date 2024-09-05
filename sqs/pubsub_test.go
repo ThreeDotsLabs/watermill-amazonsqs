@@ -2,28 +2,30 @@ package sqs_test
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"testing"
 
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/internal"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/tests"
 )
 
-func TestPublishSubscribe(t *testing.T) {
+func TestPubSub(t *testing.T) {
 	tests.TestPubSub(
 		t,
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false,
+			GuaranteedOrder:     false, // todo?
 			Persistent:          true,
 		},
 		createPubSub,
@@ -31,7 +33,7 @@ func TestPublishSubscribe(t *testing.T) {
 	)
 }
 
-func TestPublishSubscribe_stress(t *testing.T) {
+func TestPubSub_stress(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) * 2)
 
 	tests.TestPubSubStressTest(
@@ -39,7 +41,7 @@ func TestPublishSubscribe_stress(t *testing.T) {
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false,
+			GuaranteedOrder:     false, // todo?
 			Persistent:          true,
 		},
 		createPubSub,
@@ -47,9 +49,307 @@ func TestPublishSubscribe_stress(t *testing.T) {
 	)
 }
 
-func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
+func TestPublishSubscribe_with_GenerateQueueUrlResolver(t *testing.T) {
+	tests.TestPublishSubscribe(
+		t,
+		tests.TestContext{
+			TestID: tests.NewTestID(),
+			Features: tests.Features{
+				ConsumerGroups:                      true,
+				ExactlyOnceDelivery:                 false,
+				GuaranteedOrder:                     true,
+				GuaranteedOrderWithSingleSubscriber: true,
+				Persistent:                          true,
+			},
+		},
+		func(t *testing.T) (message.Publisher, message.Subscriber) {
+			cfg := newAwsConfig(t)
+
+			queueResolver := sqs.GenerateQueueUrlResolver{
+				AwsRegion:    "us-west-2",
+				AwsAccountID: "000000000000",
+			}
+
+			return createPubSubWithConfig(
+				t,
+				sqs.PublisherConfig{
+					AWSConfig: cfg,
+					CreateQueueConfig: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					Marshaler:        sqs.DefaultMarshalerUnmarshaler{},
+					QueueUrlResolver: queueResolver,
+				},
+				sqs.SubscriberConfig{
+					AWSConfig: cfg,
+					QueueConfigAttributes: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					GenerateReceiveMessageInput: func(ctx context.Context, queueURL sqs.QueueURL) (*awssqs.ReceiveMessageInput, error) {
+						in, err := sqs.GenerateReceiveMessageInputDefault(ctx, queueURL)
+						if err != nil {
+							return nil, err
+						}
+
+						// this will effectively enable batching
+						in.MaxNumberOfMessages = 10
+
+						return in, nil
+					},
+					Unmarshaler:      sqs.DefaultMarshalerUnmarshaler{},
+					QueueUrlResolver: queueResolver,
+				},
+			)
+		},
+	)
+}
+
+func TestPublishSubscribe_with_TransparentUrlResolver(t *testing.T) {
+	tests.TestPublishSubscribe(
+		t,
+		tests.TestContext{
+			TestID: tests.NewTestID(),
+			Features: tests.Features{
+				ConsumerGroups:                      true,
+				ExactlyOnceDelivery:                 false,
+				GuaranteedOrder:                     true,
+				GuaranteedOrderWithSingleSubscriber: true,
+				Persistent:                          true,
+				GenerateTopicFunc: func(tctx tests.TestContext) string {
+					return fmt.Sprintf("http://sqs.us-west-2.localhost.localstack.cloud:4566/000000000000/%s", tctx.TestID)
+				},
+			},
+		},
+		func(t *testing.T) (message.Publisher, message.Subscriber) {
+			cfg := newAwsConfig(t)
+
+			queueResolver := sqs.TransparentUrlResolver{}
+
+			return createPubSubWithConfig(
+				t,
+				sqs.PublisherConfig{
+					AWSConfig: cfg,
+					CreateQueueConfig: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					Marshaler:        sqs.DefaultMarshalerUnmarshaler{},
+					QueueUrlResolver: queueResolver,
+				},
+				sqs.SubscriberConfig{
+					AWSConfig: cfg,
+					QueueConfigAttributes: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					GenerateReceiveMessageInput: func(ctx context.Context, queueURL sqs.QueueURL) (*awssqs.ReceiveMessageInput, error) {
+						in, err := sqs.GenerateReceiveMessageInputDefault(ctx, queueURL)
+						if err != nil {
+							return nil, err
+						}
+
+						// this will effectively enable batching
+						in.MaxNumberOfMessages = 10
+
+						return in, nil
+					},
+					Unmarshaler:      sqs.DefaultMarshalerUnmarshaler{},
+					QueueUrlResolver: queueResolver,
+				},
+			)
+		},
+	)
+}
+
+func TestPublishSubscribe_batching(t *testing.T) {
+	tests.TestPublishSubscribe(
+		t,
+		tests.TestContext{
+			TestID: tests.NewTestID(),
+			Features: tests.Features{
+				ConsumerGroups:                      true,
+				ExactlyOnceDelivery:                 false,
+				GuaranteedOrder:                     true,
+				GuaranteedOrderWithSingleSubscriber: true,
+				Persistent:                          true,
+			},
+		},
+		func(t *testing.T) (message.Publisher, message.Subscriber) {
+			cfg := newAwsConfig(t)
+
+			return createPubSubWithConfig(
+				t,
+				sqs.PublisherConfig{
+					AWSConfig: cfg,
+					CreateQueueConfig: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					Marshaler: sqs.DefaultMarshalerUnmarshaler{},
+				},
+				sqs.SubscriberConfig{
+					AWSConfig: cfg,
+					QueueConfigAttributes: sqs.QueueConfigAttributes{
+						// Default value is 30 seconds - need to be lower for tests
+						VisibilityTimeout: "1",
+					},
+					GenerateReceiveMessageInput: func(ctx context.Context, queueURL sqs.QueueURL) (*awssqs.ReceiveMessageInput, error) {
+						in, err := sqs.GenerateReceiveMessageInputDefault(ctx, queueURL)
+						if err != nil {
+							return nil, err
+						}
+
+						// this will effectively enable batching
+						in.MaxNumberOfMessages = 10
+
+						return in, nil
+					},
+					Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
+				},
+			)
+		},
+	)
+}
+
+func TestPublishSubscribe_creating_queue_with_different_settings_should_be_idempotent(t *testing.T) {
 	logger := watermill.NewStdLogger(false, false)
 
+	sub1, err := sqs.NewSubscriber(sqs.SubscriberConfig{
+		AWSConfig: newAwsConfig(t),
+		QueueConfigAttributes: sqs.QueueConfigAttributes{
+			VisibilityTimeout: "1",
+		},
+		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
+	}, logger)
+	require.NoError(t, err)
+
+	sub2, err := sqs.NewSubscriber(sqs.SubscriberConfig{
+		AWSConfig: newAwsConfig(t),
+		QueueConfigAttributes: sqs.QueueConfigAttributes{
+			VisibilityTimeout: "20",
+		},
+		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
+	}, logger)
+	require.NoError(t, err)
+
+	topicName := watermill.NewUUID()
+
+	require.NoError(t, sub1.SubscribeInitialize(topicName))
+	require.NoError(t, sub2.SubscribeInitialize(topicName))
+}
+
+func TestPublisher_GetOrCreateQueueUrl_is_idempotent(t *testing.T) {
+	pub, _ := createPubSub(t)
+
+	topicName := watermill.NewUUID()
+
+	name1, url1, err := pub.(*sqs.Publisher).GetQueueUrl(context.Background(), topicName, true)
+	require.NoError(t, err)
+
+	name2, url2, err := pub.(*sqs.Publisher).GetQueueUrl(context.Background(), topicName, true)
+	require.NoError(t, err)
+
+	require.Equal(t, url1, url2)
+	require.Equal(t, name1, name2)
+
+}
+
+func TestSubscriber_doesnt_hang_when_queue_doesnt_exist(t *testing.T) {
+	cfg := newAwsConfig(t)
+
+	_, sub := createPubSubWithConfig(
+		t,
+		sqs.PublisherConfig{
+			AWSConfig: cfg,
+			CreateQueueConfig: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Marshaler: sqs.DefaultMarshalerUnmarshaler{},
+		},
+		sqs.SubscriberConfig{
+			AWSConfig: cfg,
+			QueueConfigAttributes: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Unmarshaler:                 sqs.DefaultMarshalerUnmarshaler{},
+			DoNotCreateQueueIfNotExists: true,
+		},
+	)
+	msgs, err := sub.Subscribe(context.Background(), "non-existing-queue")
+
+	require.ErrorContains(t, err, "queue for topic 'non-existing-queue' doesn't exists")
+	require.Nil(t, msgs)
+}
+
+func TestPublisher_do_not_create_queue(t *testing.T) {
+	cfg := newAwsConfig(t)
+
+	pub, _ := createPubSubWithConfig(
+		t,
+		sqs.PublisherConfig{
+			AWSConfig: cfg,
+			CreateQueueConfig: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Marshaler:                   sqs.DefaultMarshalerUnmarshaler{},
+			DoNotCreateQueueIfNotExists: true,
+		},
+		sqs.SubscriberConfig{
+			AWSConfig: cfg,
+			QueueConfigAttributes: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
+		},
+	)
+	err := pub.Publish("non-existing-queue-2", message.NewMessage("1", []byte("x")))
+
+	require.ErrorContains(t, err, "queue for topic non-existing-queue-2 doesn't exist")
+}
+
+func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
+	cfg := newAwsConfig(t)
+
+	return createPubSubWithConfig(
+		t,
+		sqs.PublisherConfig{
+			AWSConfig: cfg,
+			CreateQueueConfig: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Marshaler: sqs.DefaultMarshalerUnmarshaler{},
+		},
+		sqs.SubscriberConfig{
+			AWSConfig: cfg,
+			QueueConfigAttributes: sqs.QueueConfigAttributes{
+				// Default value is 30 seconds - need to be lower for tests
+				VisibilityTimeout: "1",
+			},
+			Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
+		},
+	)
+}
+
+func createPubSubWithConfig(t *testing.T, pubConfig sqs.PublisherConfig, subConfig sqs.SubscriberConfig) (message.Publisher, message.Subscriber) {
+	logger := watermill.NewStdLogger(false, false)
+
+	pub, err := sqs.NewPublisher(pubConfig, logger)
+	require.NoError(t, err)
+
+	sub, err := sqs.NewSubscriber(subConfig, logger)
+	require.NoError(t, err)
+
+	return pub, sub
+}
+
+func newAwsConfig(t *testing.T) aws.Config {
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion("us-west-2"),
@@ -59,32 +359,10 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 				SecretAccessKey: "test",
 			},
 		}),
-		connection.SetEndPoint("http://localhost:4100"),
+		internal.SetEndPoint("http://localhost:4566"),
 	)
 	require.NoError(t, err)
-
-	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
-		AWSConfig: cfg,
-		CreateQueueConfig: sqs.QueueConfigAtrributes{
-			// Defalt value is 30 seconds - need to be lower for tests
-			VisibilityTimeout: "1",
-		},
-		CreateQueueIfNotExists: true,
-		Marshaler:              sqs.DefaultMarshalerUnmarshaler{},
-	}, logger)
-	require.NoError(t, err)
-
-	sub, err := sqs.NewSubscriber(sqs.SubscriberConfig{
-		AWSConfig: cfg,
-		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{
-			// Defalt value is 30 seconds - need to be lower for tests
-			VisibilityTimeout: "1",
-		},
-		Unmarshaler: sqs.DefaultMarshalerUnmarshaler{},
-	}, logger)
-	require.NoError(t, err)
-
-	return pub, sub
+	return cfg
 }
 
 func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.Publisher, message.Subscriber) {

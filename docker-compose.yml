@@ -1,6 +1,16 @@
-version: '3'
 services:
-  goaws:
-    image: pafortin/goaws:latest
+  localstack:
+    container_name: localstack
+    image: localstack/localstack:latest
+    environment:
+      - SERVICES=sqs,sns
+      - AWS_DEFAULT_REGION=us-east-1
+      - EDGE_PORT=4566
     ports:
-      - 4100:4100
+      - "4566-4597:4566-4597"
+    healthcheck:
+      test: awslocal sqs list-queues && awslocal sns list-topics
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
