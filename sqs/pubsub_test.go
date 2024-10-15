@@ -27,7 +27,7 @@ func TestPubSub(t *testing.T) {
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false, // todo?
+			GuaranteedOrder:     true,
 			Persistent:          true,
 		},
 		createPubSub,
@@ -36,14 +36,12 @@ func TestPubSub(t *testing.T) {
 }
 
 func TestPubSub_stress(t *testing.T) {
-	runtime.GOMAXPROCS(runtime.GOMAXPROCS(0) * 2)
-
 	tests.TestPubSubStressTest(
 		t,
 		tests.Features{
 			ConsumerGroups:      false,
 			ExactlyOnceDelivery: false,
-			GuaranteedOrder:     false, // todo?
+			GuaranteedOrder:     true,
 			Persistent:          true,
 		},
 		createPubSub,
