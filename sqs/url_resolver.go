@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
+// QueueUrlResolver resolves queue URL by topic passed to Publisher.Publish, Subscriber.Subscribe.
 type QueueUrlResolver interface {
 	ResolveQueueUrl(ctx context.Context, params ResolveQueueUrlParams) (QueueUrlResolverResult, error)
 }
@@ -37,6 +38,7 @@ type QueueUrlResolverResult struct {
 	Exists *bool
 }
 
+// GenerateQueueUrlResolver is a resolver that generates queue URL based on AWS region and account ID.
 type GenerateQueueUrlResolver struct {
 	AwsRegion    string
 	AwsAccountID string
@@ -56,6 +58,7 @@ func (p GenerateQueueUrlResolver) ResolveQueueUrl(ctx context.Context, params Re
 }
 
 type GetQueueUrlByNameUrlResolverConfig struct {
+	// DoNotCacheQueues disables caching of queue URLs.
 	DoNotCacheQueues bool
 
 	// GenerateGetQueueUrlInput generates *sqs.GetQueueUrlInput for AWS SDK.
@@ -63,7 +66,9 @@ type GetQueueUrlByNameUrlResolverConfig struct {
 }
 
 // GetQueueUrlByNameUrlResolver resolves queue url by calling AWS API.
-// todo: more docs
+// Topic name passed to Publisher.Publish, Subscriber.Subscribe is mapped to queue name.
+//
+// By default, queue URL is cached. It can be changed with GetQueueUrlByNameUrlResolverConfig.
 type GetQueueUrlByNameUrlResolver struct {
 	config GetQueueUrlByNameUrlResolverConfig
 
@@ -135,7 +140,6 @@ func (p *GetQueueUrlByNameUrlResolver) ResolveQueueUrl(ctx context.Context, para
 	}()
 
 	// it can be present in cache only if it was created
-
 	queueUrl, err := getQueueUrl(ctx, params.SqsClient, params.Topic, getQueueInput)
 	if err == nil {
 		exists := true
@@ -175,6 +179,8 @@ func GenerateGetQueueUrlInputDefault(ctx context.Context, topic string) (*sqs.Ge
 	}, nil
 }
 
+// TransparentUrlResolver is a resolver that uses topic passed to Publisher.Publish, Subscriber.Subscribe as queue URL.
+// In this case, you should pass queue URL as topic.
 type TransparentUrlResolver struct{}
 
 func (p TransparentUrlResolver) ResolveQueueUrl(ctx context.Context, params ResolveQueueUrlParams) (res QueueUrlResolverResult, err error) {

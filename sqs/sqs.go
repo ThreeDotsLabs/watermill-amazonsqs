@@ -9,10 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// QueueURL is a URL of the queue.
 type QueueURL string
 
+// QueueName is a name of the queue.
 type QueueName string
 
+// QueueArn is an ARN of the queue.
 type QueueArn string
 
 func getQueueUrl(ctx context.Context, sqsClient *sqs.Client, topic string, input *sqs.GetQueueUrlInput) (*QueueURL, error) {

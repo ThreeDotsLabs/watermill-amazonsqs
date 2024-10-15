@@ -82,10 +82,14 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 	return s.sqs.Subscribe(ctx, sqsTopic)
 }
 
+// SubscribeInitialize initializes SNS subscription for given topic.
+// It creates SQS queue and subscribes it to SNS topic.
 func (s *Subscriber) SubscribeInitialize(topic string) error {
 	return s.SubscribeInitializeWithContext(context.Background(), topic)
 }
 
+// SubscribeInitializeWithContext initializes SNS subscription for given topic.
+// It creates SQS queue and subscribes it to SNS topic.
 func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
 	logger := s.logger.With(watermill.LogFields{
 		"topic": topic,

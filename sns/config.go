@@ -12,18 +12,25 @@ import (
 )
 
 type PublisherConfig struct {
+	// AWSConfig is the AWS configuration.
 	AWSConfig aws.Config
 
 	// OptFns are options for the SNS client.
 	OptFns []func(*sns.Options)
 
-	CreateTopicConfig           ConfigAttributes
+	// ConfigAttributes is a struct that holds the attributes of an SNS topic.
+	CreateTopicConfig ConfigAttributes
+
+	// DoNotCreateTopicIfNotExists disables creating the topic if it does not exist.
 	DoNotCreateTopicIfNotExists bool
 
+	// TopicResolver is a function that resolves the topic name to the topic ARN.
 	TopicResolver TopicResolver
 
+	// GenerateCreateTopicInput generates the input for the CreateTopic operation.
 	GenerateCreateTopicInput GenerateCreateTopicInputFunc
 
+	// Marshaler is a marshaler that marshals the message to the SNS input.
 	Marshaler Marshaler
 }
 
@@ -65,24 +72,30 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic TopicName, attrs
 }
 
 type SubscriberConfig struct {
+	// AWSConfig is the AWS configuration.
 	AWSConfig aws.Config
 
 	// OptFns are options for the SNS client.
 	OptFns []func(*sns.Options)
 
+	// TopicResolver is a function that resolves the topic name to the topic ARN.
 	TopicResolver TopicResolver
 
+	// GenerateSqsQueueName generates the name of the SQS queue for the SNS subscription.
 	GenerateSqsQueueName GenerateSqsQueueNameFn
 
+	// GenerateSubscribeInput generates the input for the Subscribe operation.
 	GenerateSubscribeInput GenerateSubscribeInputFn
 
+	// GenerateQueueAccessPolicy generates the access policy for the SQS queue.
 	GenerateQueueAccessPolicy GenerateQueueAccessPolicyFn
 
+	// DoNotCreateSqsSubscription disables creating the SQS subscription.
 	DoNotCreateSqsSubscription bool
 
 	// DoNotSetQueueAccessPolicy disables setting the queue access policy.
 	// Described in AWS docs: https://docs.aws.amazon.com/sns/latest/dg/subscribe-sqs-queue-to-sns-topic.html#SendMessageToSQS.sqs.permissions
-	// It requires "sqs:SetQueueAttributes" permission.
+	// Creating access policy requires "sqs:SetQueueAttributes" permission.
 	DoNotSetQueueAccessPolicy bool
 }
 

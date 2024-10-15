@@ -13,13 +13,16 @@ import (
 )
 
 type SubscriberConfig struct {
+	// AWSConfig is the AWS configuration.
 	AWSConfig aws.Config
 
 	// OptFns are options for the SQS client.
 	OptFns []func(*sqs.Options)
 
+	// DoNotCreateQueueIfNotExists disables creating the queue if it does not exist.
 	DoNotCreateQueueIfNotExists bool
 
+	// QueueUrlResolver is a function that resolves the queue name to the queue URL.
 	QueueUrlResolver QueueUrlResolver
 
 	// ReconnectRetrySleep is the time to sleep between reconnect attempts.
@@ -84,16 +87,19 @@ func (c SubscriberConfig) Validate() error {
 }
 
 type PublisherConfig struct {
+	// AWSConfig is the AWS configuration.
 	AWSConfig aws.Config
 
 	// OptFns are options for the SQS client.
 	OptFns []func(*sqs.Options)
 
+	// QueueConfigAttributes is a struct that holds the attributes of an SQS queue.
 	CreateQueueConfig QueueConfigAttributes
-	DoNotCacheQueues  bool
 
+	// DoNotCreateQueueIfNotExists disables creating the queue if it does not exist.
 	DoNotCreateQueueIfNotExists bool
 
+	// QueueUrlResolver is a function that resolves queue URL.
 	QueueUrlResolver QueueUrlResolver
 
 	// GenerateSendMessageInput generates *sqs.SendMessageInput for AWS SDK.

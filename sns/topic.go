@@ -6,10 +6,12 @@ import (
 	"fmt"
 )
 
+// TopicResolver resolves topic name to topic ARN by topic passed to Publisher.Publish, Subscriber.Subscribe.
 type TopicResolver interface {
 	ResolveTopic(ctx context.Context, topic string) (snsTopic TopicArn, err error)
 }
 
+// TransparentTopicResolver is a TopicResolver that passes the topic as is.
 type TransparentTopicResolver struct{}
 
 func (a TransparentTopicResolver) ResolveTopic(ctx context.Context, topic string) (snsTopic TopicArn, err error) {
@@ -17,6 +19,8 @@ func (a TransparentTopicResolver) ResolveTopic(ctx context.Context, topic string
 	return TopicArn(topic), nil
 }
 
+// GenerateArnTopicResolver is a TopicResolver that generates ARN for the topic
+// using the provided account ID and region.
 type GenerateArnTopicResolver struct {
 	accountID string
 	region    string
