@@ -15,6 +15,9 @@ import (
 type SubscriberConfig struct {
 	AWSConfig aws.Config
 
+	// OptFns are options for the SQS client.
+	OptFns []func(*sqs.Options)
+
 	DoNotCreateQueueIfNotExists bool
 
 	QueueUrlResolver QueueUrlResolver
@@ -82,6 +85,9 @@ func (c SubscriberConfig) Validate() error {
 
 type PublisherConfig struct {
 	AWSConfig aws.Config
+
+	// OptFns are options for the SQS client.
+	OptFns []func(*sqs.Options)
 
 	CreateQueueConfig QueueConfigAttributes
 	DoNotCacheQueues  bool

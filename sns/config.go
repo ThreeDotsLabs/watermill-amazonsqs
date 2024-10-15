@@ -14,6 +14,9 @@ import (
 type PublisherConfig struct {
 	AWSConfig aws.Config
 
+	// OptFns are options for the SNS client.
+	OptFns []func(*sns.Options)
+
 	CreateTopicConfig           ConfigAttributes
 	DoNotCreateTopicIfNotExists bool
 
@@ -63,6 +66,9 @@ func GenerateCreateTopicInputDefault(ctx context.Context, topic TopicName, attrs
 
 type SubscriberConfig struct {
 	AWSConfig aws.Config
+
+	// OptFns are options for the SNS client.
+	OptFns []func(*sns.Options)
 
 	TopicResolver TopicResolver
 

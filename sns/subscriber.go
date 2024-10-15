@@ -48,8 +48,8 @@ func NewSubscriber(
 	return &Subscriber{
 		config:    config,
 		logger:    logger,
-		sns:       sns.NewFromConfig(config.AWSConfig),
-		sqsClient: awsSqs.NewFromConfig(config.AWSConfig),
+		sns:       sns.NewFromConfig(config.AWSConfig, config.OptFns...),
+		sqsClient: awsSqs.NewFromConfig(sqsConfig.AWSConfig, sqsConfig.OptFns...),
 		sqs:       sqs,
 	}, nil
 }
@@ -59,6 +59,12 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 	if err != nil {
 		return nil, err
 	}
+
+	logger := s.logger.With(watermill.LogFields{
+		"topic":     topic,
+		"topic_arn": snsTopicArn,
+	})
+	logger.Debug("Subscribing to topic", nil)
 
 	if !s.config.DoNotCreateSqsSubscription {
 		if err := s.SubscribeInitializeWithContext(ctx, topic); err != nil {
@@ -71,6 +77,8 @@ func (s *Subscriber) Subscribe(ctx context.Context, topic string) (<-chan *messa
 		return nil, fmt.Errorf("failed to generate SQS queue name: %w", err)
 	}
 
+	logger.Debug("Subscribing to SQS", watermill.LogFields{"sqs_topic": sqsTopic})
+
 	return s.sqs.Subscribe(ctx, sqsTopic)
 }
 
@@ -79,10 +87,17 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 }
 
 func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
+	logger := s.logger.With(watermill.LogFields{
+		"topic": topic,
+	})
+	logger.Debug("Initializing SNS subscription", nil)
+
 	snsTopicArn, err := s.config.TopicResolver.ResolveTopic(ctx, topic)
 	if err != nil {
 		return err
 	}
+
+	logger.Debug("Resolved topic", watermill.LogFields{"topic_arn": snsTopicArn})
 
 	sqsTopic, err := s.config.GenerateSqsQueueName(ctx, snsTopicArn)
 	if err != nil {

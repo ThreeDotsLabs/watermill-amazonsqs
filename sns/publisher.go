@@ -2,13 +2,13 @@ package sns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
-	"github.com/pkg/errors"
 )
 
 type Publisher struct {
@@ -25,7 +25,7 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 	}
 
 	return &Publisher{
-		sns:    sns.NewFromConfig(config.AWSConfig),
+		sns:    sns.NewFromConfig(config.AWSConfig, config.OptFns...),
 		config: config,
 		logger: logger,
 	}, nil

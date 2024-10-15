@@ -43,7 +43,7 @@ func NewSubscriber(config SubscriberConfig, logger watermill.LoggerAdapter) (*Su
 	return &Subscriber{
 		config:  config,
 		logger:  logger,
-		sqs:     sqs.NewFromConfig(config.AWSConfig),
+		sqs:     sqs.NewFromConfig(config.AWSConfig, config.OptFns...),
 		closing: make(chan struct{}),
 	}, nil
 }
@@ -275,10 +275,20 @@ func (s *Subscriber) SubscribeInitialize(topic string) error {
 }
 
 func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic string) error {
+	logger := s.logger.With(watermill.LogFields{
+		"topic": topic,
+	})
+	logger.Debug("Initializing SQS subscription", nil)
+
 	resolvedQueue, err := s.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
 		Topic:     topic,
 		SqsClient: s.sqs,
 		Logger:    s.logger,
+	})
+
+	logger.Debug("Topic resolving done", watermill.LogFields{
+		"resolved_queue": resolvedQueue,
+		"err":            err,
 	})
 	if err != nil {
 		return err
@@ -291,6 +301,10 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	if err != nil {
 		return fmt.Errorf("cannot generate input for queue %s: %w", topic, err)
 	}
+
+	logger.Debug("Creating queue", watermill.LogFields{
+		"queue_name": *input.QueueName,
+	})
 
 	_, err = createQueue(ctx, s.sqs, input)
 	if err != nil {

@@ -3,14 +3,16 @@ package sqs_test
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"net/url"
 	"testing"
 
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/internal"
+	amazonsqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+	transport "github.com/aws/smithy-go/endpoints"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -74,6 +76,9 @@ func TestPublishSubscribe_with_GenerateQueueUrlResolver(t *testing.T) {
 				t,
 				sqs.PublisherConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					CreateQueueConfig: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -83,6 +88,9 @@ func TestPublishSubscribe_with_GenerateQueueUrlResolver(t *testing.T) {
 				},
 				sqs.SubscriberConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					QueueConfigAttributes: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -131,6 +139,9 @@ func TestPublishSubscribe_with_TransparentUrlResolver(t *testing.T) {
 				t,
 				sqs.PublisherConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					CreateQueueConfig: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -140,6 +151,9 @@ func TestPublishSubscribe_with_TransparentUrlResolver(t *testing.T) {
 				},
 				sqs.SubscriberConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					QueueConfigAttributes: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -183,6 +197,9 @@ func TestPublishSubscribe_batching(t *testing.T) {
 				t,
 				sqs.PublisherConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					CreateQueueConfig: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -191,6 +208,9 @@ func TestPublishSubscribe_batching(t *testing.T) {
 				},
 				sqs.SubscriberConfig{
 					AWSConfig: cfg,
+					OptFns: []func(*amazonsqs.Options){
+						GetEndpointResolverSqs(),
+					},
 					QueueConfigAttributes: sqs.QueueConfigAttributes{
 						// Default value is 30 seconds - need to be lower for tests
 						VisibilityTimeout: "1",
@@ -218,6 +238,9 @@ func TestPublishSubscribe_creating_queue_with_different_settings_should_be_idemp
 
 	sub1, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: newAwsConfig(t),
+		OptFns: []func(*amazonsqs.Options){
+			GetEndpointResolverSqs(),
+		},
 		QueueConfigAttributes: sqs.QueueConfigAttributes{
 			VisibilityTimeout: "1",
 		},
@@ -227,6 +250,9 @@ func TestPublishSubscribe_creating_queue_with_different_settings_should_be_idemp
 
 	sub2, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: newAwsConfig(t),
+		OptFns: []func(*amazonsqs.Options){
+			GetEndpointResolverSqs(),
+		},
 		QueueConfigAttributes: sqs.QueueConfigAttributes{
 			VisibilityTimeout: "20",
 		},
@@ -263,6 +289,9 @@ func TestSubscriber_doesnt_hang_when_queue_doesnt_exist(t *testing.T) {
 		t,
 		sqs.PublisherConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			CreateQueueConfig: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -271,6 +300,9 @@ func TestSubscriber_doesnt_hang_when_queue_doesnt_exist(t *testing.T) {
 		},
 		sqs.SubscriberConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			QueueConfigAttributes: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -292,6 +324,9 @@ func TestPublisher_do_not_create_queue(t *testing.T) {
 		t,
 		sqs.PublisherConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			CreateQueueConfig: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -301,6 +336,9 @@ func TestPublisher_do_not_create_queue(t *testing.T) {
 		},
 		sqs.SubscriberConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			QueueConfigAttributes: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -320,6 +358,9 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 		t,
 		sqs.PublisherConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			CreateQueueConfig: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -328,6 +369,9 @@ func createPubSub(t *testing.T) (message.Publisher, message.Subscriber) {
 		},
 		sqs.SubscriberConfig{
 			AWSConfig: cfg,
+			OptFns: []func(*amazonsqs.Options){
+				GetEndpointResolverSqs(),
+			},
 			QueueConfigAttributes: sqs.QueueConfigAttributes{
 				// Default value is 30 seconds - need to be lower for tests
 				VisibilityTimeout: "1",
@@ -359,7 +403,6 @@ func newAwsConfig(t *testing.T) aws.Config {
 				SecretAccessKey: "test",
 			},
 		}),
-		internal.SetEndPoint("http://localhost:4566"),
 	)
 	require.NoError(t, err)
 	return cfg
@@ -367,4 +410,12 @@ func newAwsConfig(t *testing.T) aws.Config {
 
 func createPubSubWithConsumerGroup(t *testing.T, consumerGroup string) (message.Publisher, message.Subscriber) {
 	return createPubSub(t)
+}
+
+func GetEndpointResolverSqs() func(*amazonsqs.Options) {
+	return amazonsqs.WithEndpointResolverV2(sqs.OverrideEndpointResolver{
+		Endpoint: transport.Endpoint{
+			URI: url.URL{Scheme: "http", Host: "localhost:4566"},
+		},
+	})
 }

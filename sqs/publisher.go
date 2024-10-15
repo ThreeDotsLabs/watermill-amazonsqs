@@ -2,13 +2,13 @@ package sqs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/pkg/errors"
 )
 
 type Publisher struct {
@@ -25,7 +25,7 @@ func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publ
 	}
 
 	return &Publisher{
-		sqs:    sqs.NewFromConfig(config.AWSConfig),
+		sqs:    sqs.NewFromConfig(config.AWSConfig, config.OptFns...),
 		config: config,
 		logger: logger,
 	}, nil
