@@ -1,15 +1,13 @@
 package sns
 
 import (
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sns/types"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 )
-
-// todo: check if it can be renamed
-const UUIDAttribute = "UUID"
 
 type Marshaler interface {
 	Marshal(topicArn TopicArn, msg *message.Message) *sns.PublishInput
@@ -21,9 +19,8 @@ func (d DefaultMarshalerUnmarshaler) Marshal(topicArn TopicArn, msg *message.Mes
 	// client side uuid
 	// there is a deduplication id that can be use for
 	// fifo queues
-	// todo: check how it works
 	attributes, deduplicationId, groupId := metadataToAttributes(msg.Metadata)
-	attributes[UUIDAttribute] = types.MessageAttributeValue{
+	attributes[sqs.UUIDAttribute] = types.MessageAttributeValue{
 		StringValue: aws.String(msg.UUID),
 		DataType:    aws.String("String"),
 	}
@@ -42,11 +39,11 @@ func metadataToAttributes(meta message.Metadata) (map[string]types.MessageAttrib
 	var deduplicationId, groupId *string
 	for k, v := range meta {
 		// SNS has special attributes for deduplication and group id
-		if k == "MessageDeduplicationId" {
+		if k == MessageDeduplicationIdMetadataField {
 			deduplicationId = aws.String(v)
 			continue
 		}
-		if k == "MessageGroupId" {
+		if k == MessageGroupIdMetadataField {
 			groupId = aws.String(v)
 			continue
 		}
@@ -58,3 +55,7 @@ func metadataToAttributes(meta message.Metadata) (map[string]types.MessageAttrib
 
 	return attributes, deduplicationId, groupId
 }
+
+const MessageDeduplicationIdMetadataField = "MessageDeduplicationId"
+
+const MessageGroupIdMetadataField = "MessageGroupId"

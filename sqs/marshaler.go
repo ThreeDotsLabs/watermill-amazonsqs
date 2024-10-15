@@ -7,7 +7,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-const UUIDAttribute = "UUID"
+const UUIDAttribute = "_watermill_message_uuid"
 
 type Marshaler interface {
 	Marshal(msg *message.Message) (*types.Message, error)

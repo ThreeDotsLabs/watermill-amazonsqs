@@ -118,7 +118,7 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	}
 
 	if !s.config.DoNotSetQueueAccessPolicy {
-		if err := s.setSqsQuePolicy(ctx, *sqsQueueArn, snsTopicArn, *sqsURL); err != nil {
+		if err := s.setSqsQueuePolicy(ctx, *sqsQueueArn, snsTopicArn, *sqsURL); err != nil {
 			return fmt.Errorf("cannot set queue access policy for topic %s: %w", snsTopicArn, err)
 		}
 	}
@@ -147,12 +147,15 @@ func (s *Subscriber) SubscribeInitializeWithContext(ctx context.Context, topic s
 	return nil
 }
 
-func (s *Subscriber) setSqsQuePolicy(ctx context.Context, sqsQueueArn sqs.QueueArn, snsTopicArn TopicArn, sqsURL sqs.QueueURL) error {
+func (s *Subscriber) setSqsQueuePolicy(ctx context.Context, sqsQueueArn sqs.QueueArn, snsTopicArn TopicArn, sqsURL sqs.QueueURL) error {
 	policy, err := s.config.GenerateQueueAccessPolicy(ctx, GenerateQueueAccessPolicyParams{
 		SqsQueueArn: sqsQueueArn,
 		SnsTopicArn: snsTopicArn,
 		SqsURL:      sqsURL,
 	})
+	if err != nil {
+		return fmt.Errorf("cannot generate queue access policy: %w", err)
+	}
 
 	policyJSON, err := json.Marshal(policy)
 	if err != nil {
