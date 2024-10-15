@@ -2,19 +2,14 @@ package sqs
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
-
-type PublisherConfig struct {
-	AWSConfig              aws.Config
-	CreateQueueConfig      QueueConfigAtrributes
-	CreateQueueIfNotExists bool
-	Marshaler              Marshaler
-}
 
 type Publisher struct {
 	config PublisherConfig
@@ -24,65 +19,116 @@ type Publisher struct {
 
 func NewPublisher(config PublisherConfig, logger watermill.LoggerAdapter) (*Publisher, error) {
 	config.setDefaults()
+
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &Publisher{
-		sqs:    sqs.NewFromConfig(config.AWSConfig),
+		sqs:    sqs.NewFromConfig(config.AWSConfig, config.OptFns...),
 		config: config,
 		logger: logger,
 	}, nil
 }
 
-func (p Publisher) Publish(topic string, messages ...*message.Message) error {
+func (p *Publisher) Publish(topic string, messages ...*message.Message) error {
 	ctx := context.Background()
-	queueUrl, err := p.GetQueueUrl(ctx, topic)
+
+	queueName, queueUrl, err := p.GetQueueUrl(ctx, topic, !p.config.DoNotCreateQueueIfNotExists)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot get queue url: %w", err)
 	}
+
 	for _, msg := range messages {
 		sqsMsg, err := p.config.Marshaler.Marshal(msg)
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot marshal message: %w", err)
 		}
 
 		p.logger.Debug("Sending message", watermill.LogFields{"msg": msg})
-		_, err = p.sqs.SendMessage(ctx, &sqs.SendMessageInput{
-			QueueUrl:          queueUrl,
-			MessageAttributes: sqsMsg.MessageAttributes,
-			MessageBody:       sqsMsg.Body,
-		})
+
+		input, err := p.config.GenerateSendMessageInput(ctx, queueUrl, sqsMsg)
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot generate send message input: %w", err)
 		}
-	}
 
-	return nil
-}
-
-func (p Publisher) GetQueueUrl(ctx context.Context, topic string) (*string, error) {
-	queueUrl, err := GetQueueUrl(ctx, p.sqs, topic)
-	if err != nil {
-		if p.config.CreateQueueIfNotExists {
-			queueUrl, err = CreateQueue(ctx, p.sqs, topic, sqs.CreateQueueInput{
-				Attributes: p.config.CreateQueueConfig.Attributes(),
-			})
-			if err == nil {
-				return queueUrl, nil
+		_, err = p.sqs.SendMessage(ctx, input)
+		var queueDoesNotExistErr *types.QueueDoesNotExist
+		if errors.As(err, &queueDoesNotExistErr) && !p.config.DoNotCreateQueueIfNotExists {
+			// GetQueueUrl may not create queue if QueueUrlResolver doesn't check if queue exists
+			_, err := p.createQueue(ctx, topic, queueName)
+			if err != nil {
+				return err
 			}
 		}
-		return nil, err
+		if err != nil {
+			return fmt.Errorf("cannot send message: %w", err)
+		}
 	}
-	return queueUrl, nil
-}
 
-func (p Publisher) GetQueueArn(ctx context.Context, url *string) (*string, error) {
-	return GetARNUrl(ctx, p.sqs, url)
-}
-
-func (p Publisher) Close() error {
 	return nil
 }
 
-func (c *PublisherConfig) setDefaults() {
-	if c.Marshaler == nil {
-		c.Marshaler = DefaultMarshalerUnmarshaler{}
+func (p *Publisher) GetQueueUrl(ctx context.Context, topic string, createIfNotExists bool) (QueueName, QueueURL, error) {
+	resolvedQueue, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
+		Topic:     topic,
+		SqsClient: p.sqs,
+		Logger:    p.logger,
+	})
+	if err != nil {
+		return "", "", err
 	}
+	if resolvedQueue.Exists != nil && *resolvedQueue.Exists {
+		return resolvedQueue.QueueName, *resolvedQueue.QueueURL, nil
+	}
+
+	if createIfNotExists {
+		queueUrl, err := p.createQueue(ctx, topic, resolvedQueue.QueueName)
+		if err != nil {
+			return "", "", err
+		}
+
+		return resolvedQueue.QueueName, queueUrl, nil
+
+	} else {
+		return "", "", fmt.Errorf("queue for topic %s doesn't exist", topic)
+	}
+}
+
+func (p *Publisher) createQueue(ctx context.Context, topic string, queueName QueueName) (QueueURL, error) {
+	input, err := p.config.GenerateCreateQueueInput(ctx, queueName, p.config.CreateQueueConfig)
+	if err != nil {
+		return "", fmt.Errorf("cannot generate create queue input: %w", err)
+	}
+
+	queueUrl, err := createQueue(ctx, p.sqs, input)
+	if err != nil {
+		return "", fmt.Errorf("cannot create queue: %w", err)
+	}
+	// queue was created in the meantime
+	if queueUrl == nil {
+		resolvedQueue, err := p.config.QueueUrlResolver.ResolveQueueUrl(ctx, ResolveQueueUrlParams{
+			Topic:     topic,
+			SqsClient: p.sqs,
+			Logger:    p.logger,
+		})
+		if err != nil {
+			return "", err
+		}
+		if resolvedQueue.Exists != nil && !*resolvedQueue.Exists {
+			return "", fmt.Errorf("queue doesn't exist after creation")
+		}
+
+		return *resolvedQueue.QueueURL, nil
+	}
+
+	return *queueUrl, nil
+}
+
+func (p *Publisher) GetQueueArn(ctx context.Context, url *QueueURL) (*QueueArn, error) {
+	return getARNUrl(ctx, p.sqs, url)
+}
+
+func (p *Publisher) Close() error {
+	return nil
 }
